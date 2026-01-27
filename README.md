@@ -25,8 +25,28 @@ Read in order:
 2. [docs/DATA_FORMATS.md](docs/DATA_FORMATS.md) - Data specifications
 3. [docs/DEVELOPMENT_GUIDE.md](docs/DEVELOPMENT_GUIDE.md) - How to develop
 4. [docs/ROADMAP.md](docs/ROADMAP.md) - Project phases and status
+5. [docs/CLUSTER_SETUP.md](docs/CLUSTER_SETUP.md) - GPU cluster setup
 
-### For Humans
+### For GPU Cluster (Recommended)
+```bash
+# 1. Upload to cluster
+rsync -avz akklang/ user@cluster:/home/user/akklang/
+
+# 2. Build container (one-time, ~15 min)
+ssh user@cluster
+cd ~/akklang
+./cluster/build_container.sh
+
+# 3. Run pipeline
+./cluster/submit_job.sh baseline   # Phase 0: Week 1
+./cluster/submit_job.sh extract    # Phase 1: Weeks 2-3
+./cluster/submit_job.sh train      # Phase 3: Weeks 4-6
+./cluster/submit_job.sh inference  # Phase 4: Weeks 6-8
+```
+
+See [docs/CLUSTER_SETUP.md](docs/CLUSTER_SETUP.md) for full instructions.
+
+### For Local Development
 ```bash
 # Install dependencies
 pip install -r requirements.txt
