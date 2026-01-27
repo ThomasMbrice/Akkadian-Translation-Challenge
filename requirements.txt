@@ -1,0 +1,42 @@
+# Core ML frameworks
+torch>=2.0.0
+transformers>=4.30.0
+datasets>=2.14.0
+accelerate>=0.20.0
+
+# Retrieval and embeddings
+faiss-cpu>=1.7.4  # Use faiss-gpu if GPU available
+sentence-transformers>=2.2.0
+
+# Evaluation metrics
+sacrebleu>=2.3.0
+evaluate>=0.4.0
+nltk>=3.8.0
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+scikit-learn>=1.3.0
+
+# Text processing
+regex>=2023.0.0
+tqdm>=4.65.0
+
+# Configuration
+pyyaml>=6.0.0
+omegaconf>=2.3.0
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Development
+pytest>=7.4.0
+black>=23.7.0
+flake8>=6.1.0
+ipython>=8.14.0
+jupyter>=1.0.0
+
+# Optional: LLM API access for OCR correction and translation
+openai>=1.0.0
+anthropic>=0.3.0

@@ -1,0 +1,96 @@
+# Preprocessing configuration for Old Assyrian transliterations
+
+# Input/output paths
+input:
+  train: data/raw/train.csv
+  published_texts: data/raw/published_texts.csv
+  lexicon: data/raw/OA_Lexicon_eBL.csv
+  sentence_alignment_aid: data/raw/Sentences_Oare_FirstWord_LinNum.csv
+
+output:
+  train_sentences: data/processed/train_sentences.csv
+  proper_nouns: data/indices/proper_nouns.json
+  sumerograms: data/indices/sumerograms.json
+
+# Preprocessing rules (per competition spec)
+normalization:
+  # Characters to remove
+  remove_chars:
+    - "!"  # Certainty marker
+    - "?"  # Uncertainty marker
+    - "/"  # Gloss separator
+    - ":"  # Colon
+    - "."  # Period
+    - "˹"  # Partial damage start
+    - "˺"  # Partial damage end
+
+  # Patterns to remove (including content)
+  remove_patterns:
+    - "<<.*?>>"  # Erasure markers
+
+  # Patterns to preserve (keep content inside)
+  preserve_patterns:
+    - "\\[.*?\\]"  # Damaged text
+    - "<.*?>"      # Scribal corrections
+    - "\\{.*?\\}"  # Determinatives
+
+  # Gap normalization
+  gaps:
+    single_gap_patterns:
+      - "\\[x\\]"
+      - "\\[\\?\\.\\]"
+    single_gap_replacement: "<gap>"
+
+    big_gap_patterns:
+      - "\\[x x\\]"
+      - "\\[x x x\\]"
+      - "\\[\\.\\.\\.\\]"
+      - "\\[n lines broken\\]"
+      - "\\[broken\\]"
+    big_gap_replacement: "<big_gap>"
+
+# Feature extraction
+extraction:
+  # Extract proper nouns (Capitalized words)
+  proper_nouns:
+    enabled: true
+    min_capital_ratio: 0.5  # At least 50% of word should be capitalized
+
+  # Extract Sumerograms (all-caps words)
+  sumerograms:
+    enabled: true
+    min_length: 2  # Minimum word length
+
+  # Extract determinatives (content in {braces})
+  determinatives:
+    enabled: true
+
+# Sentence alignment
+alignment:
+  # Split document-level translations into sentences
+  sentence_splitting:
+    enabled: true
+    use_alignment_aid: true  # Use Sentences_Oare_FirstWord_LinNum.csv
+
+  # Validation
+  validate_alignment: true
+  max_length_ratio: 3.0  # Akkadian/English length ratio threshold
+
+# Quality filters
+quality:
+  # Minimum/maximum lengths
+  min_akkadian_length: 3
+  max_akkadian_length: 1000
+  min_english_length: 3
+  max_english_length: 2000
+
+  # Validation checks
+  check_proper_nouns: true
+  check_sumerograms: true
+  check_determinatives: true
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/preprocessing.log

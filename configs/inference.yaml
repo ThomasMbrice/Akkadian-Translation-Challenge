@@ -1,0 +1,71 @@
+# Inference configuration for generating translations
+
+# Model
+model:
+  checkpoint: models/byt5_finetuned  # Path to fine-tuned model
+  device: auto  # auto, cpu, cuda, cuda:0, etc.
+
+# Input/output
+data:
+  input: data/raw/test.csv  # Competition test data
+  output: predictions.csv   # Output predictions
+  batch_size: 16
+
+# Retrieval (RAG)
+retrieval:
+  enabled: true
+  index_path: data/indices/faiss_index.bin
+  lexicon_path: data/indices/proper_nouns.json
+  sumerogram_path: data/indices/sumerograms.json
+  k_examples: 5  # Retrieve top-5 similar examples
+  max_context_length: 512  # Max bytes for RAG context
+
+# Generation parameters
+generation:
+  max_length: 512
+  num_beams: 5  # Beam search width
+  early_stopping: true
+  no_repeat_ngram_size: 3  # Prevent 3-gram repetition
+  length_penalty: 1.0  # >1.0 favors longer outputs, <1.0 favors shorter
+
+  # Sampling (alternative to beam search)
+  do_sample: false
+  temperature: 1.0
+  top_k: 50
+  top_p: 0.95
+
+# Preprocessing
+preprocessing:
+  apply_normalization: true  # Apply same preprocessing as training
+  config: configs/preprocessing.yaml
+
+# Postprocessing
+postprocessing:
+  # Fix common errors
+  fix_proper_nouns: true  # Correct capitalization using lexicon
+  fix_sumerograms: true   # Ensure Sumerograms match dictionary
+
+  # Validation
+  validate_output: true
+  remove_invalid: false  # If true, remove invalid predictions (dangerous)
+
+# Performance
+performance:
+  use_fp16: true  # Faster inference on GPU
+  use_cache: true  # Cache key-value pairs in transformer
+
+# Ensembling (optional)
+ensemble:
+  enabled: false
+  models:
+    - models/byt5_finetuned_seed42
+    - models/byt5_finetuned_seed123
+    - models/byt5_finetuned_seed456
+  strategy: majority_vote  # Options: majority_vote, weighted_average, mbrt
+
+# Logging
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: logs/inference.log
+  progress_bar: true

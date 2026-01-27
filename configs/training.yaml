@@ -1,0 +1,97 @@
+# Training configuration for ByT5 fine-tuning
+
+# Model
+model:
+  name: google/byt5-base  # Options: google/byt5-base, google/byt5-large
+  max_input_length: 1024   # ByT5 max sequence length (bytes)
+  max_output_length: 512   # Max translation length
+
+# Data
+data:
+  train_corpus: data/processed/combined_corpus.csv
+  validation_split: 0.05  # 5% for validation (90/5/5 split)
+  test_split: 0.05  # 5% for testing
+
+  # Dataset statistics (from research):
+  # - Total: ~50,299 sentences
+  # - Train: 45,269 sentences (90%)
+  # - Validation: 2,515 sentences (5%)
+  # - Test: 2,515 sentences (5%)
+  # - Average sentence length: 17.93 characters
+  # - Sentences over 50 characters: 3,957
+
+  # Augmentation
+  augmentation:
+    enabled: true
+    synthetic_gaps:
+      enabled: true
+      probability: 0.3  # 30% of examples get synthetic gaps
+      gap_length_range: [1, 5]  # Mask 1-5 consecutive words
+    back_translation:
+      enabled: false  # Enable if back-translation model available
+
+# Retrieval (RAG)
+retrieval:
+  enabled: true
+  index_path: data/indices/faiss_index.bin
+  lexicon_path: data/indices/proper_nouns.json
+  sumerogram_path: data/indices/sumerograms.json
+  k_examples: 5  # Retrieve top-5 similar examples
+  max_context_length: 512  # Max bytes for RAG context
+
+# Training hyperparameters
+training:
+  # Optimizer
+  learning_rate: 5.0e-5
+  weight_decay: 0.01
+  warmup_steps: 500
+
+  # Batch size
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 16
+  gradient_accumulation_steps: 2  # Effective batch size = 8 * 2 = 16
+
+  # Epochs and steps
+  num_train_epochs: 10
+  max_steps: -1  # -1 means use num_train_epochs
+
+  # Evaluation
+  evaluation_strategy: steps
+  eval_steps: 500
+  save_strategy: steps
+  save_steps: 500
+  save_total_limit: 3  # Keep only 3 best checkpoints
+
+  # Early stopping
+  load_best_model_at_end: true
+  metric_for_best_model: eval_loss
+  early_stopping_patience: 3  # Stop if no improvement for 3 eval steps
+
+  # Generation (for validation)
+  predict_with_generate: true
+  generation_max_length: 512
+  generation_num_beams: 4
+
+# Hardware
+hardware:
+  fp16: true  # Mixed precision training (faster, less memory)
+  gradient_checkpointing: false  # Enable if OOM
+  dataloader_num_workers: 4
+
+# Logging and output
+output:
+  output_dir: models/byt5_finetuned
+  logging_dir: logs/training
+  logging_steps: 100
+  report_to: null  # Options: wandb, tensorboard, null
+
+# Reproducibility
+seed: 42
+
+# Advanced: Multi-task learning (optional)
+multi_task:
+  enabled: false
+  tasks:
+    - translation
+    - lemmatization  # Predict lemmatized forms
+    - pos_tagging    # Predict part-of-speech tags
