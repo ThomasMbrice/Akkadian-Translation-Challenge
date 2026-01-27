@@ -42,6 +42,7 @@ venv.bak/
 
 # macOS
 .DS_Store
+._*
 
 # Data files (competition data is large)
 data/
@@ -74,3 +75,9 @@ logs/
 
 # Config overrides (keep templates only)
 configs/local_*.yaml
+
+# Singularity containers (large binary files)
+*.sif
+
+# SLURM logs
+logs/slurm/
