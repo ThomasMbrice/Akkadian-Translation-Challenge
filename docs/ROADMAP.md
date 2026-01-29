@@ -14,10 +14,10 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 **Goal:** Establish zero-shot baseline and end-to-end pipeline
 
 ### Deliverables
-- [ ] Competition data downloaded to `data/raw/`
-- [ ] Basic preprocessing implemented (`src/preprocessing/normalizer.py`)
+- [x] Competition data downloaded to `data/raw/`
+- [x] Basic preprocessing implemented (`src/preprocessing/normalizer.py`)
 - [ ] Zero-shot ByT5 baseline tested
-- [ ] Submission pipeline functional (`scripts/submit.py`)
+- [x] Submission pipeline functional (`scripts/submit.py`)
 - [ ] Baseline scores recorded
 
 ### Key Metrics (Expected)
@@ -241,10 +241,25 @@ Publication extraction → Corpus size → Model performance
 
 ## Current Status
 
-**Phase:** [TO BE UPDATED]
-**Week:** [TO BE UPDATED]
-**Completed deliverables:** [TO BE UPDATED]
-**Blockers:** [TO BE UPDATED]
+**Phase:** Phase 0 - Baseline (Week 1)
+**Week:** Week 1
+**Completed deliverables:**
+- ✓ Competition data downloaded and extracted
+- ✓ Basic preprocessing implemented (normalizer, extractor, aligner)
+- ✓ Utils module (I/O, constants, logging)
+- ✓ Evaluation metrics (BLEU, chrF++, proper noun accuracy)
+- ✓ Preprocessing script (`scripts/preprocess.py`)
+- ✓ Zero-shot baseline script (`scripts/baseline.py`)
+- ✓ Submission script (`scripts/submit.py`)
+- ✓ Cluster infrastructure ready (Singularity, SLURM scripts)
+
+**Next steps:**
+1. Run preprocessing: `python scripts/preprocess.py`
+2. Run baseline evaluation: `python scripts/baseline.py --sample 100`
+3. Record baseline scores
+4. Test cluster setup (optional): `./cluster/submit_job.sh test`
+
+**Blockers:** None
 
 ---
 

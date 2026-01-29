@@ -7,7 +7,7 @@ model:
 
 # Input/output
 data:
-  input: data/raw/test.csv  # Competition test data
+  input: data/raw/deep-past-initiative-machine-translation/test.csv  # Competition test data
   output: predictions.csv   # Output predictions
   batch_size: 16
 

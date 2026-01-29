@@ -2,10 +2,10 @@
 
 # Input/output paths
 input:
-  train: data/raw/train.csv
-  published_texts: data/raw/published_texts.csv
-  lexicon: data/raw/OA_Lexicon_eBL.csv
-  sentence_alignment_aid: data/raw/Sentences_Oare_FirstWord_LinNum.csv
+  train: data/raw/deep-past-initiative-machine-translation/train.csv
+  published_texts: data/raw/deep-past-initiative-machine-translation/published_texts.csv
+  lexicon: data/raw/deep-past-initiative-machine-translation/OA_Lexicon_eBL.csv
+  sentence_alignment_aid: data/raw/deep-past-initiative-machine-translation/Sentences_Oare_FirstWord_LinNum.csv
 
 output:
   train_sentences: data/processed/train_sentences.csv
@@ -70,7 +70,7 @@ alignment:
   # Split document-level translations into sentences
   sentence_splitting:
     enabled: true
-    use_alignment_aid: true  # Use Sentences_Oare_FirstWord_LinNum.csv
+    use_alignment_aid: false  # Disabled - IDs don't match between files
 
   # Validation
   validate_alignment: true
