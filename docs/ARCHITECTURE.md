@@ -72,13 +72,13 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 
 ## Key Technical Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Tokenization | Byte-level (ByT5) | Akkadian has hyphens, diacritics, mixed scripts—BPE mangles it |
-| Retrieval embedding | Embed English side | No pretrained Akkadian embedders exist |
-| RAG integration | Context stuffing | Simpler than Fusion-in-Decoder, sufficient for formulaic texts |
-| Data augmentation | Back-translation + synthetic gaps | Tablets have lacunae; model must handle missing content |
-| Evaluation | BLEU + chrF++ + manual | chrF++ better for morphologically rich languages |
+| Decision                         | Choice                    | Rationale |
+|----------------------------------|---------------------------|-----------|
+| Tokenization                     | Byte-level (ByT5)         | Akkadian has hyphens, diacritics, mixed scripts—BPE mangles it |
+| Retrieval embedding              | Embed English side        | No pretrained Akkadian embedders exist |
+| RAG integration                  | Context stuffing          | Simpler than Fusion-in-Decoder, sufficient for formulaic texts |
+| Data augmentation                | Back-translation + synthetic gaps  | Tablets have lacunae; model must handle missing content |
+| Evaluation                       | BLEU + chrF++ + manual    | chrF++ better for morphologically rich languages |
 
 ## Data Pipeline
 

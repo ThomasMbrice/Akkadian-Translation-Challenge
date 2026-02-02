@@ -2,23 +2,21 @@
 
 # Model
 model:
-  name: google/byt5-base  # Options: google/byt5-base, google/byt5-large
-  max_input_length: 1024   # ByT5 max sequence length (bytes)
-  max_output_length: 512   # Max translation length
+  name: google/byt5-small  # Options: google/byt5-small, google/byt5-base, google/byt5-large
+  max_input_length: 512    # ByT5 max sequence length (bytes) - reduced for small corpus
+  max_output_length: 256   # Max translation length
 
 # Data
 data:
   train_corpus: data/processed/combined_corpus.csv
-  validation_split: 0.05  # 5% for validation (90/5/5 split)
-  test_split: 0.05  # 5% for testing
+  validation_split: 0.10  # 10% for validation (more important with small corpus)
+  test_split: 0.10  # 10% for testing
 
-  # Dataset statistics (from research):
-  # - Total: ~50,299 sentences
-  # - Train: 45,269 sentences (90%)
-  # - Validation: 2,515 sentences (5%)
-  # - Test: 2,515 sentences (5%)
-  # - Average sentence length: 17.93 characters
-  # - Sentences over 50 characters: 3,957
+  # Dataset statistics (actual, 2026-02-02):
+  # - Total: 1,589 pairs (after Phase 1 extraction)
+  # - Train: ~1,270 pairs (80%)
+  # - Validation: ~160 pairs (10%)
+  # - Test: ~160 pairs (10%)
 
   # Augmentation
   augmentation:
@@ -33,11 +31,10 @@ data:
 # Retrieval (RAG)
 retrieval:
   enabled: true
+  corpus_path: data/processed/combined_corpus.csv
   index_path: data/indices/faiss_index.bin
-  lexicon_path: data/indices/proper_nouns.json
-  sumerogram_path: data/indices/sumerograms.json
-  k_examples: 5  # Retrieve top-5 similar examples
-  max_context_length: 512  # Max bytes for RAG context
+  k_examples: 3  # Retrieve top-3 similar examples (smaller corpus)
+  max_context_length: 800  # Max bytes for RAG context
 
 # Training hyperparameters
 training:

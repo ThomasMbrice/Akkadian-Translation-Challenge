@@ -11,14 +11,19 @@ Usage:
 
 import argparse
 import logging
+import os
 from pathlib import Path
 import sys
+import time
 from typing import List
 import json
 
 import torch
 from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 from tqdm import tqdm
+
+# Increase HuggingFace Hub download timeout to 300s (default is 10s)
+os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "300")
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
@@ -31,6 +36,38 @@ from src.evaluation.metrics import MetricsCalculator
 logger = logging.getLogger(__name__)
 
 
+def _load_with_retry(load_fn, max_retries: int = 3, backoff: float = 5.0):
+    """
+    Retry a HuggingFace download call with exponential backoff.
+
+    Args:
+        load_fn: Callable that performs the download (e.g. AutoTokenizer.from_pretrained)
+        max_retries: Number of retry attempts
+        backoff: Base delay in seconds between retries (doubles each attempt)
+
+    Returns:
+        Result of load_fn()
+    """
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            return load_fn()
+        except Exception as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait = backoff * (2 ** attempt)
+                logger.warning(
+                    f"Download attempt {attempt + 1}/{max_retries} failed: {e}. "
+                    f"Retrying in {wait:.0f}s..."
+                )
+                time.sleep(wait)
+            else:
+                logger.error(
+                    f"Download failed after {max_retries} attempts."
+                )
+    raise last_error
+
+
 class ByT5Translator:
     """Zero-shot translator using ByT5."""
 
@@ -39,14 +76,16 @@ class ByT5Translator:
         model_name: str = "google/byt5-small",
         device: str = None,
         max_length: int = 512,
+        cache_dir: str = None,
     ):
         """
         Initialize ByT5 translator.
 
         Args:
-            model_name: Hugging Face model name
+            model_name: Hugging Face model name or local path
             device: Device to use (cuda/cpu), auto-detect if None
             max_length: Maximum sequence length
+            cache_dir: Local directory to cache downloaded models (None = HF default)
         """
         self.model_name = model_name
         self.max_length = max_length
@@ -59,10 +98,21 @@ class ByT5Translator:
 
         logger.info(f"Loading model: {model_name}")
         logger.info(f"Device: {self.device}")
+        if cache_dir:
+            logger.info(f"Cache dir: {cache_dir}")
 
-        # Load tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
+        # Build common kwargs for from_pretrained
+        pretrained_kwargs = {}
+        if cache_dir:
+            pretrained_kwargs["cache_dir"] = cache_dir
+
+        # Load tokenizer and model with retry logic
+        self.tokenizer = _load_with_retry(
+            lambda: AutoTokenizer.from_pretrained(model_name, **pretrained_kwargs)
+        )
+        self.model = _load_with_retry(
+            lambda: AutoModelForSeq2SeqLM.from_pretrained(model_name, **pretrained_kwargs)
+        )
         self.model.to(self.device)
         self.model.eval()
 
@@ -130,6 +180,7 @@ def run_baseline(
     batch_size: int = 8,
     num_beams: int = 4,
     sample_size: int = None,
+    cache_dir: str = None,
 ) -> None:
     """
     Run zero-shot baseline evaluation.
@@ -141,6 +192,7 @@ def run_baseline(
         batch_size: Batch size for inference
         num_beams: Number of beams for beam search
         sample_size: Limit evaluation to N samples (None for all)
+        cache_dir: Local directory to cache downloaded models
     """
     # Setup
     setup_logging(level="INFO")
@@ -177,6 +229,7 @@ def run_baseline(
     translator = ByT5Translator(
         model_name=model_name,
         max_length=512,
+        cache_dir=cache_dir,
     )
 
     # Translate
@@ -276,6 +329,12 @@ def main():
         default=None,
         help="Sample size (default: use all data)",
     )
+    parser.add_argument(
+        "--cache-dir",
+        type=str,
+        default=None,
+        help="Local directory to cache downloaded models (avoids re-downloading)",
+    )
 
     args = parser.parse_args()
 
@@ -287,6 +346,7 @@ def main():
             batch_size=args.batch_size,
             num_beams=args.num_beams,
             sample_size=args.sample,
+            cache_dir=args.cache_dir,
         )
     except Exception as e:
         logger.error(f"Baseline evaluation failed: {e}", exc_info=True)
