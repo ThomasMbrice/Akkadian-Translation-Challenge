@@ -28,7 +28,9 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
+import sacrebleu
 import torch
 from datasets import Dataset
 from transformers import (
@@ -37,6 +39,7 @@ from transformers import (
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
     DataCollatorForSeq2Seq,
+    EarlyStoppingCallback,
 )
 
 from src.modeling.context_assembler import ContextAssembler
@@ -200,14 +203,13 @@ class ByT5Trainer:
             padding=False,  # Will pad in collator
         )
 
-        # Tokenize targets
-        with self.tokenizer.as_target_tokenizer():
-            labels = self.tokenizer(
-                targets,
-                max_length=self.max_target_length,
-                truncation=True,
-                padding=False,
-            )
+        # Tokenize targets (ByT5 uses the same byte-level tokenizer for src/tgt)
+        labels = self.tokenizer(
+            targets,
+            max_length=self.max_target_length,
+            truncation=True,
+            padding=False,
+        )
 
         # Create dataset
         data_dict = {
@@ -217,6 +219,34 @@ class ByT5Trainer:
         }
 
         return Dataset.from_dict(data_dict)
+
+    # ------------------------------------------------------------------
+    # Metrics
+    # ------------------------------------------------------------------
+
+    def _make_compute_metrics(self):
+        """
+        Return a closure suitable for Seq2SeqTrainer.compute_metrics.
+
+        Decodes generated token-IDs and reference labels, then computes
+        corpus-level BLEU and chrF++ via sacrebleu.
+        """
+        tokenizer = self.tokenizer
+
+        def compute_metrics(eval_pred):
+            predictions, labels = eval_pred
+            # -100 is the "ignore" index used by the loss; replace for decoding
+            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+            decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+            decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+            decoded_preds = [p.strip() for p in decoded_preds]
+            decoded_labels = [l.strip() for l in decoded_labels]
+
+            bleu = sacrebleu.corpus_bleu(decoded_preds, [decoded_labels])
+            chrf = sacrebleu.corpus_chrf(decoded_preds, [decoded_labels])
+            return {"eval_bleu": round(bleu.score, 4), "eval_chrf": round(chrf.score, 4)}
+
+        return compute_metrics
 
     # ------------------------------------------------------------------
     # Training
@@ -235,6 +265,10 @@ class ByT5Trainer:
         logging_steps: int = 50,
         gradient_accumulation_steps: int = 1,
         fp16: bool = False,
+        early_stopping_patience: int = 3,
+        generation_num_beams: int = 4,
+        generation_max_length: int = 256,
+        seed: int = 42,
         transliteration_col: str = "transliteration",
         translation_col: str = "translation",
     ) -> None:
@@ -264,6 +298,10 @@ class ByT5Trainer:
             translation_col=translation_col,
         )
 
+        # Mixed precision: fp16 on CUDA, bf16 on MPS, nothing on CPU
+        use_fp16 = fp16 and self.device == "cuda"
+        use_bf16 = self.device == "mps"
+
         # Set up training arguments
         training_args = Seq2SeqTrainingArguments(
             output_dir=str(self.output_dir),
@@ -277,16 +315,21 @@ class ByT5Trainer:
             logging_steps=logging_steps,
             save_steps=save_steps,
             eval_steps=eval_steps if eval_dataset is not None else None,
-            evaluation_strategy="steps" if eval_dataset is not None else "no",
+            eval_strategy="steps" if eval_dataset is not None else "no",
             save_total_limit=3,
             load_best_model_at_end=eval_dataset is not None,
             metric_for_best_model="eval_loss" if eval_dataset is not None else None,
             greater_is_better=False,
             gradient_accumulation_steps=gradient_accumulation_steps,
-            fp16=fp16 and self.device == "cuda",
-            report_to=["tensorboard"],
+            fp16=use_fp16,
+            bf16=use_bf16,
+            report_to="none",
             push_to_hub=False,
             predict_with_generate=True,
+            generation_max_length=generation_max_length,
+            generation_num_beams=generation_num_beams,
+            seed=seed,
+            dataloader_num_workers=0,  # avoid fork issues on macOS
         )
 
         # Data collator
@@ -296,14 +339,22 @@ class ByT5Trainer:
             padding=True,
         )
 
+        # Callbacks
+        callbacks = []
+        if eval_dataset is not None and early_stopping_patience > 0:
+            callbacks.append(
+                EarlyStoppingCallback(early_stopping_patience=early_stopping_patience)
+            )
+
         # Initialize trainer
         trainer = Seq2SeqTrainer(
             model=self.model,
             args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=self.tokenizer,
             data_collator=data_collator,
+            compute_metrics=self._make_compute_metrics(),
+            callbacks=callbacks if callbacks else None,
         )
 
         # Train
@@ -377,6 +428,7 @@ class ByT5Trainer:
                 max_length=max_length,
                 num_beams=num_beams,
                 early_stopping=True,
+                no_repeat_ngram_size=3,
             )
 
         # Decode

@@ -53,8 +53,14 @@ SINGLE_GAP_TOKEN = "<gap>"
 BIG_GAP_TOKEN = "<big_gap>"
 
 # Feature extraction patterns
-PROPER_NOUN_PATTERN = r"\b[A-ZĀĒĪŪṢṬŠḪ][a-zA-Zāēīūṣṭšḫ-]*\b"
-SUMEROGRAM_PATTERN = r"\b[A-Z]{2,}(?:\.[A-Z]+)*\b"
+# Comprehensive OA character sets (covers all accented variants in the corpus)
+# Upper: macrons + dots-below + carons + acute/grave/circumflex/diaeresis
+_OA_UPPER = "A-ZĀĒĪŪṢṬŠḪÁÀÉÈÍÌÚÙÂÊÎÛÄÏÜ"
+# Lower: same accented vowels/consonants + hamza modifier ʾ
+_OA_LOWER = "a-zāēīūṣṭšḫáàéèíìúùâêîûäïüʾ"
+
+PROPER_NOUN_PATTERN = rf"\b[{_OA_UPPER}][{_OA_LOWER}{_OA_UPPER}₀₁₂₃₄₅₆₇₈₉-]*\b"
+SUMEROGRAM_PATTERN = rf"\b[{_OA_UPPER}]{{2,}}[₀-₉]*(?:\.[{_OA_UPPER}]+[₀-₉]*)*\b"
 DETERMINATIVE_PATTERN = r"\{[^}]+\}"
 
 # Proper noun indicators (capital letters including diacritics)

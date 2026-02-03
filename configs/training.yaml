@@ -3,7 +3,7 @@
 # Model
 model:
   name: google/byt5-small  # Options: google/byt5-small, google/byt5-base, google/byt5-large
-  max_input_length: 512    # ByT5 max sequence length (bytes) - reduced for small corpus
+  max_input_length: 1024   # ByT5 max sequence length (bytes) - needs headroom for RAG context + diacritics
   max_output_length: 256   # Max translation length
 
 # Data
@@ -41,7 +41,7 @@ training:
   # Optimizer
   learning_rate: 5.0e-5
   weight_decay: 0.01
-  warmup_steps: 500
+  warmup_steps: 50       # ~6 % of 800 total optimizer steps (1270 train / eff-batch 16 * 10 epochs)
 
   # Batch size
   per_device_train_batch_size: 8
@@ -54,9 +54,9 @@ training:
 
   # Evaluation
   evaluation_strategy: steps
-  eval_steps: 500
+  eval_steps: 100        # Evaluate ~8x during a full 10-epoch run
   save_strategy: steps
-  save_steps: 500
+  save_steps: 100        # Save ~8x, keep best 3 via save_total_limit
   save_total_limit: 3  # Keep only 3 best checkpoints
 
   # Early stopping

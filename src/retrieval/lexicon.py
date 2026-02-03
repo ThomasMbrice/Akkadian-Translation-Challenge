@@ -91,28 +91,72 @@ class Lexicon:
         self._proper_noun_forms = list(self.proper_nouns.keys())
         logger.info(f"Loaded {len(self.proper_nouns)} proper nouns (PN + GN)")
 
-        # Load eBL Dictionary
+        # Load eBL Dictionary – populates self.dictionary and a base-form
+        # lookup table used below to resolve Sumerogram glosses.
         ebl_df = pd.read_csv(self.ebl_dict_path)
         logger.info(f"Loaded {len(ebl_df)} entries from eBL_Dictionary.csv")
 
+        # base_form → first English definition (strip Roman-numeral suffixes)
+        ebl_base: Dict[str, str] = {}
         for _, row in ebl_df.iterrows():
             word = str(row["word"]).strip()
             definition = str(row["definition"]).strip() if pd.notna(row["definition"]) else ""
 
-            # Check if all-caps (likely Sumerogram)
-            if word.isupper() and len(word) >= 2:
-                # Clean definition (remove quotes, extra whitespace)
-                clean_def = definition.strip('"').strip()
-                if clean_def:
-                    self.sumerograms[word] = clean_def
-
-            # Store all definitions
+            # Store full entry in dictionary
             if definition:
                 self.dictionary[word] = definition.strip('"').strip()
 
-        self._sumerogram_forms = list(self.sumerograms.keys())
-        logger.info(f"Loaded {len(self.sumerograms)} Sumerograms")
+            # Also index by base form (remove trailing " I" / " II" / " III" / " IV")
+            parts = word.split(" ")
+            if len(parts) > 1 and parts[-1] in ("I", "II", "III", "IV"):
+                base = " ".join(parts[:-1]).strip()
+            else:
+                base = word
+            clean_def = definition.strip('"').strip()
+            if base and clean_def and base not in ebl_base:
+                ebl_base[base] = clean_def
+
         logger.info(f"Total dictionary entries: {len(self.dictionary)}")
+
+        # Resolve Sumerograms from OA_Lexicon.
+        # All-uppercase forms (type=="word") are Sumerograms; their `norm`
+        # column gives the Akkadian reading.  We try several morphological
+        # variants against the eBL base-form index to get an English gloss;
+        # fall back to the Akkadian reading when no gloss is found.
+        resolved = 0
+        for _, row in oa_df.iterrows():
+            form = str(row["form"]).strip()
+            norm = str(row["norm"]).strip() if pd.notna(row["norm"]) else ""
+            entry_type = str(row["type"]).strip()
+
+            if not (form.isupper() and len(form) >= 2 and entry_type == "word"):
+                continue
+            if form in self.sumerograms:
+                continue  # keep first occurrence
+
+            # Candidate stems to look up in eBL.
+            # Only try appending the nominative suffix (-u / -um); do NOT
+            # replace trailing vowels because Akkadian has many minimal pairs
+            # that differ only in vowel quality (e.g. mer'u "son" vs mēru "hundred").
+            candidates = [norm]
+            if len(norm) > 1:
+                candidates.append(norm + "u")    # add nominative -u
+                candidates.append(norm + "um")   # add nominative -um
+
+            definition = None
+            for candidate in candidates:
+                if candidate in ebl_base:
+                    definition = ebl_base[candidate]
+                    resolved += 1
+                    break
+
+            self.sumerograms[form] = definition if definition else norm
+
+        self._sumerogram_forms = list(self.sumerograms.keys())
+        logger.info(
+            f"Loaded {len(self.sumerograms)} Sumerograms "
+            f"({resolved} with English gloss, {len(self.sumerograms) - resolved} Akkadian reading only)"
+        )
 
     # ------------------------------------------------------------------
     # Lookup: Exact
@@ -241,12 +285,18 @@ class Lexicon:
         Returns:
             List of proper noun matches with metadata
         """
-        # Pattern: Capitalized word with optional hyphens and diacritics
-        pattern = r'\b[A-Z][a-zšṭṣḫāēīūṢŠḤĪŪĀĒṦ\-]+\b'
+        # Comprehensive OA character sets (matches constants._OA_UPPER / _OA_LOWER)
+        _UC = "A-ZĀĒĪŪṢṬŠḪÁÀÉÈÍÌÚÙÂÊÎÛÄÏÜ"
+        _LC = "a-zāēīūṣṭšḫáàéèíìúùâêîûäïüʾ"
+        pattern = rf'\b[{_UC}][{_LC}{_UC}₀₁₂₃₄₅₆₇₈₉-]*\b'
         candidates = re.findall(pattern, text)
 
         results = []
         for candidate in candidates:
+            # Skip pure Sumerograms (all alphabetic chars uppercase)
+            alpha_only = re.sub(r'[^a-zA-ZāēīūṣṭšḫĀĒĪŪṢṬŠḪ]', '', candidate)
+            if alpha_only and alpha_only.isupper():
+                continue
             match = self.lookup_proper_noun(candidate, fuzzy=True)
             if match:
                 results.append(match)
@@ -265,8 +315,9 @@ class Lexicon:
         Returns:
             List of Sumerogram matches with definitions
         """
-        # Pattern: All-caps words (2+ chars) with optional dots
-        pattern = r'\b[A-Z]{2,}(?:\.[A-Z]+)*\b'
+        # All-caps words (2+ chars), optional subscript digits, optional dot-segments
+        _UC = "A-ZĀĒĪŪṢṬŠḪÁÀÉÈÍÌÚÙÂÊÎÛÄÏÜ"
+        pattern = rf'\b[{_UC}]{{2,}}[₀-₉]*(?:\.[{_UC}]+[₀-₉]*)*\b'
         candidates = re.findall(pattern, text)
 
         results = []
