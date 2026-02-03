@@ -54,6 +54,13 @@ pip install -r requirements.txt
 # Run preprocessing
 python scripts/preprocess.py --config configs/preprocessing.yaml
 
+# Run baseline (use --cache-dir to cache the model and skip re-downloading)
+python scripts/baseline.py --model google/byt5-small \
+    --test-file data/processed/train_sentences.csv \
+    --output outputs/baseline \
+    --sample 100 \
+    --cache-dir models/cache
+
 # Extract publications (critical path!)
 python scripts/extract_publications.py
 
@@ -85,13 +92,15 @@ akklang/
 └── tests/             # Unit tests
 ```
 
-## Critical Path
+## Critical Path (Updated 2026-02-02)
 
 ```
 Publication extraction → Corpus size → Model performance
 ```
 
-The 900 scholarly publications are the data multiplier. Extracting high-quality parallel pairs from these PDFs is the highest-leverage activity.
+**Update:** After implementing and testing publication extraction (Phase 1), we discovered that scholarly OA publications don't contain parallel text in extractable formats. Only 28 usable pairs were extracted from 5,082 pages (0.55% yield).
+
+**Revised strategy:** Proceed with existing 1,589 pairs. Focus on strong retrieval (RAG) + data augmentation + model architecture rather than corpus expansion. See `docs/EXTRACTION_FINDINGS.md` for full analysis.
 
 ## Context
 
