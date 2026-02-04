@@ -117,7 +117,7 @@ sbatch cluster/train.slurm
 - Learning rate: 5e-5
 - Batch size: 8 per device, 2 gradient accumulation steps
 - Epochs: 10
-- RAG: Top-5 retrieved examples
+- RAG: Top-3 retrieved examples
 
 ---
 

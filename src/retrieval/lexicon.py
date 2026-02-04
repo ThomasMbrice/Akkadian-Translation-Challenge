@@ -119,29 +119,37 @@ class Lexicon:
         logger.info(f"Total dictionary entries: {len(self.dictionary)}")
 
         # Resolve Sumerograms from OA_Lexicon.
-        # All-uppercase forms (type=="word") are Sumerograms; their `norm`
-        # column gives the Akkadian reading.  We try several morphological
-        # variants against the eBL base-form index to get an English gloss;
-        # fall back to the Akkadian reading when no gloss is found.
+        # All-uppercase forms are Sumerograms; `lexeme` gives the dictionary
+        # base form (preferred for eBL lookup) and `norm` gives the surface
+        # reading (used as fallback).  For each root we try the bare form
+        # plus common nominative expansions (-u, -um).  Many eBL entries
+        # carry final mimation (-m) that is regularly dropped in Old Assyrian;
+        # if a root ends in -m we also retry on the de-mimated stem.  We do
+        # NOT replace interior vowels — Akkadian has minimal pairs that differ
+        # only in vowel quality (e.g. mer'u "son" vs mēru "hundred").
         resolved = 0
         for _, row in oa_df.iterrows():
-            form = str(row["form"]).strip()
-            norm = str(row["norm"]).strip() if pd.notna(row["norm"]) else ""
-            entry_type = str(row["type"]).strip()
+            form   = str(row["form"]).strip()
+            norm   = str(row["norm"]).strip()   if pd.notna(row["norm"])   else ""
+            lexeme = str(row["lexeme"]).strip() if pd.notna(row["lexeme"]) else ""
 
-            if not (form.isupper() and len(form) >= 2 and entry_type == "word"):
+            if not (form.isupper() and len(form) >= 2):
                 continue
             if form in self.sumerograms:
                 continue  # keep first occurrence
 
-            # Candidate stems to look up in eBL.
-            # Only try appending the nominative suffix (-u / -um); do NOT
-            # replace trailing vowels because Akkadian has many minimal pairs
-            # that differ only in vowel quality (e.g. mer'u "son" vs mēru "hundred").
-            candidates = [norm]
-            if len(norm) > 1:
-                candidates.append(norm + "u")    # add nominative -u
-                candidates.append(norm + "um")   # add nominative -um
+            # Build candidate list: lexeme-rooted variants first (dictionary
+            # base form), then norm-rooted variants as fallback.  Each root
+            # gets bare + -u + -um; if it ends in -m (mimation) we also try
+            # the de-mimated stem with the same three suffixes.
+            candidates = []
+            for root in (lexeme, norm):
+                if not root:
+                    continue
+                candidates.extend([root, root + "u", root + "um"])
+                if root.endswith("m") and len(root) > 2:
+                    stem = root[:-1]
+                    candidates.extend([stem, stem + "u", stem + "um"])
 
             definition = None
             for candidate in candidates:

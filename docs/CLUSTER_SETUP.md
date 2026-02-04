@@ -118,7 +118,7 @@ tail -f logs/slurm/extract_*.out
 **Outputs:**
 - `data/processed/combined_corpus.csv` - Final training corpus
 
-**Critical:** This step multiplies training data by 2-3x. Essential for good model performance.
+**Note:** Extraction yielded 28 pairs (1,589 total). See `docs/EXTRACTION_FINDINGS.md` for analysis.
 
 ---
 

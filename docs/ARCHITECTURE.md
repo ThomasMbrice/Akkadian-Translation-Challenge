@@ -60,7 +60,7 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 │  │  FINE-TUNED MODEL                                    │   │
 │  │                                                      │   │
 │  │  Base: ByT5 (byte-level, no tokenization issues)    │   │
-│  │  Training: ~20-50k parallel pairs                   │   │
+│  │  Training: 1,589 pairs + augmentation               │   │
 │  │  Augmentation: back-translation, synthetic gaps     │   │
 │  │  Multi-task: translation + lemmatization + POS      │   │
 │  └─────────────────────────────────────────────────────┘   │
@@ -85,7 +85,7 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 ```
 Sources:
 ├── Competition data: 8,000 texts, ~50% with translations
-├── 900 scholarly publications (PDF/scans) → OCR → LLM correction → alignment extraction
+├── 900 scholarly publications (PDF/scans) → OCR → LLM correction (28 pairs extracted)
 └── Lexicons: proper nouns, Sumerograms, determinatives (provided)
 
 Processing:
@@ -94,7 +94,8 @@ Processing:
 ├── Deduplication: same tablet appears in multiple publications
 └── Quality filter: remove paraphrases, keep literal translations
 
-Target corpus size: 20-50k parallel pairs (2-3x provided data)
+Corpus: 1,589 parallel pairs (1,561 competition + 28 extracted)
+Augmentation: synthetic gaps at training time (30% probability)
 ```
 
 ## Formatting Rules (from competition)
@@ -118,10 +119,11 @@ Target corpus size: 20-50k parallel pairs (2-3x provided data)
 ## Critical Path
 
 ```
-Publication extraction → Corpus size → Model performance
+RAG context quality → Model performance
 ```
 
-The 900 publications are the data multiplier. This extraction work has highest leverage.
+Publication extraction yielded only 28 pairs (0.55% yield); the leverage is now
+retrieval fidelity — lexicon glosses and translation memory — plus augmentation.
 
 ## Evaluation Targets
 

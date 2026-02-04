@@ -28,9 +28,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-import numpy as np
 import pandas as pd
-import sacrebleu
 import torch
 from datasets import Dataset
 from transformers import (
@@ -221,34 +219,6 @@ class ByT5Trainer:
         return Dataset.from_dict(data_dict)
 
     # ------------------------------------------------------------------
-    # Metrics
-    # ------------------------------------------------------------------
-
-    def _make_compute_metrics(self):
-        """
-        Return a closure suitable for Seq2SeqTrainer.compute_metrics.
-
-        Decodes generated token-IDs and reference labels, then computes
-        corpus-level BLEU and chrF++ via sacrebleu.
-        """
-        tokenizer = self.tokenizer
-
-        def compute_metrics(eval_pred):
-            predictions, labels = eval_pred
-            # -100 is the "ignore" index used by the loss; replace for decoding
-            labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-            decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-            decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-            decoded_preds = [p.strip() for p in decoded_preds]
-            decoded_labels = [l.strip() for l in decoded_labels]
-
-            bleu = sacrebleu.corpus_bleu(decoded_preds, [decoded_labels])
-            chrf = sacrebleu.corpus_chrf(decoded_preds, [decoded_labels])
-            return {"eval_bleu": round(bleu.score, 4), "eval_chrf": round(chrf.score, 4)}
-
-        return compute_metrics
-
-    # ------------------------------------------------------------------
     # Training
     # ------------------------------------------------------------------
 
@@ -265,9 +235,8 @@ class ByT5Trainer:
         logging_steps: int = 50,
         gradient_accumulation_steps: int = 1,
         fp16: bool = False,
+        gradient_checkpointing: bool = False,
         early_stopping_patience: int = 3,
-        generation_num_beams: int = 4,
-        generation_max_length: int = 256,
         seed: int = 42,
         transliteration_col: str = "transliteration",
         translation_col: str = "translation",
@@ -287,6 +256,7 @@ class ByT5Trainer:
             logging_steps: Log every N steps
             gradient_accumulation_steps: Gradient accumulation steps
             fp16: Use mixed precision (requires CUDA)
+            gradient_checkpointing: Trade compute for memory (recompute activations)
             transliteration_col: Source column name
             translation_col: Target column name
         """
@@ -323,11 +293,10 @@ class ByT5Trainer:
             gradient_accumulation_steps=gradient_accumulation_steps,
             fp16=use_fp16,
             bf16=use_bf16,
+            gradient_checkpointing=gradient_checkpointing,
             report_to="none",
             push_to_hub=False,
-            predict_with_generate=True,
-            generation_max_length=generation_max_length,
-            generation_num_beams=generation_num_beams,
+            predict_with_generate=False,
             seed=seed,
             dataloader_num_workers=0,  # avoid fork issues on macOS
         )
@@ -353,7 +322,6 @@ class ByT5Trainer:
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             data_collator=data_collator,
-            compute_metrics=self._make_compute_metrics(),
             callbacks=callbacks if callbacks else None,
         )
 

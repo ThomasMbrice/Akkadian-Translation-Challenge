@@ -273,7 +273,7 @@ Publication extraction → Corpus size → Model performance
 
 ## Current Status
 
-**Phase:** Phase 2 - Retrieval System — COMPLETE (2026-02-02)
+**Phase:** Phase 3 - Model Fine-Tuning — IN PROGRESS (2026-02-03)
 **Previous phases:**
 - Phase 0 - Baseline — COMPLETE
 - Phase 1 - Data Extraction — COMPLETE (revised targets)
@@ -309,7 +309,18 @@ Publication extraction → Corpus size → Model performance
 - ✓ Lexicon loaded: ~95% coverage of proper nouns + Sumerograms
 - ✓ Retrieval tested and working
 
-**Current work (2026-02-02):**
+**Phase 3: Model Fine-Tuning** (In Progress 2026-02-03)
+- ✓ Lexicon Sumerogram resolution rewritten: 6 → 80 glossed forms, 157 → 222
+  forms recognised.  Root cause: eBL lookup was keyed on `norm` (inflected);
+  switched to `lexeme` (dictionary base form) + mimation stripping.
+- ✓ `predict_with_generate` disabled during training-eval checkpoints.
+  Checkpoint selection uses `eval_loss` only; beam-search generation reserved
+  for post-training eval (`train.py:evaluate()`).
+- ✓ `gradient_checkpointing: true` enabled as memory safety margin on A100.
+- ✓ Dead code removed: `_make_compute_metrics`, unused `sacrebleu`/`numpy`
+  imports in trainer.
+
+**Extraction context (2026-02-02):**
 Initial extraction run on all 952 PDFs yielded only 146 pairs (0.09% of target).
 Investigation revealed root cause: `publications.csv` contains ALL cuneiform
 publications (Hittite, Sumerian, Babylonian, Luvian, etc.), not just Old Assyrian.
@@ -347,17 +358,12 @@ Rationale:
 - Alternative data sources (ORACC API, digital repositories) can be explored
   in parallel with Phase 2-3
 
-**Next steps:**
-1. Begin Phase 3: Model Fine-Tuning
-   - Implement data augmentation (synthetic gaps)
-   - Implement context assembler (RAG integration)
-   - Set up ByT5 training pipeline
-   - Run initial training experiment
-2. (Optional) Explore alternative data sources in parallel
+**Next step:** Submit training job to cluster: `./cluster/submit_job.sh train`
 
-**Blockers:** None
+`train.slurm` requests 1× A100, 48 h walltime.  The job auto-builds the FAISS
+index if missing, then runs `scripts/train.py --config configs/training.yaml`.
 
-**Ready for Phase 3!** All retrieval infrastructure is in place.
+**Blockers:** None.
 
 ---
 

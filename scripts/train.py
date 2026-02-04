@@ -344,9 +344,8 @@ def main():
         logging_steps=config["output"]["logging_steps"],
         gradient_accumulation_steps=train_cfg["gradient_accumulation_steps"],
         fp16=hw_cfg.get("fp16", False),
+        gradient_checkpointing=hw_cfg.get("gradient_checkpointing", False),
         early_stopping_patience=train_cfg.get("early_stopping_patience", 3),
-        generation_num_beams=train_cfg.get("generation_num_beams", 4),
-        generation_max_length=train_cfg.get("generation_max_length", 256),
         seed=config.get("seed", 42),
     )
 

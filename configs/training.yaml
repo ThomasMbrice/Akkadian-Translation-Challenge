@@ -64,15 +64,10 @@ training:
   metric_for_best_model: eval_loss
   early_stopping_patience: 3  # Stop if no improvement for 3 eval steps
 
-  # Generation (for validation)
-  predict_with_generate: true
-  generation_max_length: 512
-  generation_num_beams: 4
-
 # Hardware
 hardware:
   fp16: true  # Mixed precision training (faster, less memory)
-  gradient_checkpointing: false  # Enable if OOM
+  gradient_checkpointing: true
   dataloader_num_workers: 4
 
 # Logging and output
