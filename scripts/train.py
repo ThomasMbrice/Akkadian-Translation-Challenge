@@ -173,6 +173,7 @@ def evaluate(trainer: ByT5Trainer, split_name: str, split_df: pd.DataFrame) -> d
     # Log summary
     logger.info(f"{split_name} BLEU:   {metrics.get('bleu', 0):.2f}")
     logger.info(f"{split_name} chrF++: {metrics.get('chrf', 0):.2f}")
+    logger.info(f"{split_name} >>> COMPETITION SCORE (Geometric Mean): {metrics.get('geometric_mean', 0):.2f} <<<")
     if "proper_noun_accuracy" in metrics:
         logger.info(
             f"{split_name} PN Acc: {metrics['proper_noun_accuracy']:.2%} "

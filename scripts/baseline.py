@@ -276,6 +276,7 @@ def run_baseline(
         logger.info(f"Examples: {len(df)}")
         logger.info(f"BLEU: {metrics.get('bleu', 0):.2f}")
         logger.info(f"chrF++: {metrics.get('chrf', 0):.2f}")
+        logger.info(f">>> COMPETITION SCORE (Geometric Mean): {metrics.get('geometric_mean', 0):.2f} <<<")
         if "proper_noun_accuracy" in metrics:
             logger.info(
                 f"Proper Noun Acc: {metrics['proper_noun_accuracy']:.2%}"

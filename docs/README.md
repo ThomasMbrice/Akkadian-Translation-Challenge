@@ -81,7 +81,8 @@ If you're a new Claude instance starting work on this project:
 - Phase 1: Data Extraction (Weeks 2-3) ← **Critical path**
 - Phase 2: Retrieval System (Weeks 3-4)
 - Phase 3: Model Fine-Tuning (Weeks 4-6)
-- Phase 4: Iteration & Submission (Weeks 6-8)
+- Phase 4: Post-Processing (Week 6) ← **New: Mini-LLM refinement**
+- Phase 5: Iteration & Submission (Weeks 7-8)
 - Current status and blockers
 
 **Read this if you're asking:** "What should I work on next?"
@@ -111,9 +112,10 @@ If you're a new Claude instance starting work on this project:
 | Competition texts | ~8,000 |
 | Texts with translations | ~4,000 (50%) |
 | Publications to extract | 900 PDFs |
-| Target corpus size | 20-50k sentence pairs |
-| Baseline BLEU (zero-shot) | 5-10 |
-| Target BLEU (fine-tuned) | 30+ |
+| Target corpus size | 20-50k sentence pairs (actual: 1.6k) |
+| Baseline geometric mean (zero-shot) | 0.00 |
+| Target geometric mean (fine-tuned + post-processing) | ~39+ |
+| **Competition scoring** | **sqrt(BLEU × chrF)** |
 
 ### Critical Path
 

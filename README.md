@@ -11,9 +11,10 @@ Unlock 10,000+ untranslated Bronze Age tablets documenting ancient Mesopotamian 
 - **Model:** ByT5 (byte-level T5) fine-tuned on Old Assyrian-English parallel pairs
 - **Data:** Extract 20-50k training pairs from 900 scholarly publications via OCR + LLM alignment
 - **Retrieval:** Translation memory (RAG) + lexicon lookup for proper nouns and Sumerograms
-- **Evaluation:** BLEU, chrF++, proper noun accuracy
+- **Post-processing:** Mini-LLM refinement (Phi-3/Llama) for output quality
+- **Evaluation:** Geometric mean of BLEU and chrF (competition metric)
 
-**Target:** BLEU 30+ (competitive with state-of-the-art Akkademia baseline of BLEU 36-37)
+**Target:** Geometric mean ~39+ (sqrt(BLEU × chrF), competitive with Akkademia baseline)
 
 ## Quick Start
 
@@ -41,7 +42,7 @@ cd ~/akklang
 ./cluster/submit_job.sh baseline   # Phase 0: Week 1
 ./cluster/submit_job.sh extract    # Phase 1: Weeks 2-3
 ./cluster/submit_job.sh train      # Phase 3: Weeks 4-6
-./cluster/submit_job.sh inference  # Phase 4: Weeks 6-8
+./cluster/submit_job.sh inference  # Phases 4-5: Weeks 6-8
 ```
 
 See [docs/CLUSTER_SETUP.md](docs/CLUSTER_SETUP.md) for full instructions.

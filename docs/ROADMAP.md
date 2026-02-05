@@ -25,9 +25,12 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 |--------|----------|--------|
 | BLEU | 5-10 | 0.00 |
 | chrF++ | 20-30 | 4.88 |
+| **Geometric Mean** | **~12-18** | **0.00** |
 | Proper noun accuracy | ~40% | 2.94% (1/34) |
 
 > **Note:** Scores are lower than initial estimates. This is consistent with zero-shot ByT5-small on a language it has never seen — the model has no Akkadian knowledge whatsoever. These scores establish the true floor; all gains come from fine-tuning (Phase 3).
+>
+> **Competition scoring:** Final score = sqrt(BLEU × chrF) — the geometric mean of BLEU and chrF.
 
 ### Success Criteria
 ✓ Submission generated and uploaded
@@ -189,6 +192,7 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 |--------|--------|
 | Validation BLEU | 25-35 |
 | Validation chrF++ | 45-55 |
+| **Validation Geometric Mean** | **~33-44** |
 | Proper noun accuracy | 75-85% |
 
 ### Success Criteria
@@ -203,7 +207,81 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 
 ---
 
-## Phase 4: Iteration & Submission (Weeks 6-8)
+## Phase 4: Post-Processing (Week 6)
+
+**Goal:** Clean and refine model outputs with mini-LLM post-processing
+
+**Rationale:** ByT5 may produce outputs with formatting errors, incomplete Sumerogram handling, or grammatical issues. A lightweight post-processing step using a mini-LLM (e.g., Phi-3-mini, Llama-3.2-1B) can improve output quality without retraining the main model.
+
+### Deliverables
+- [ ] Post-processor implementation (`src/modeling/postprocessor.py`)
+- [ ] Prompt templates for post-processing task
+- [ ] Validation of post-processing improvements
+- [ ] Integration into inference pipeline
+
+### Tasks Breakdown
+
+#### Week 6: Post-Processing Pipeline
+- [ ] Select mini-LLM model (Phi-3-mini-4k, Llama-3.2-1B, or similar)
+- [ ] Design post-processing prompts:
+  - Fix formatting inconsistencies
+  - Ensure proper noun capitalization
+  - Verify Sumerogram preservation
+  - Improve fluency while maintaining literal accuracy
+- [ ] Implement post-processor with temperature/beam search tuning
+- [ ] Run A/B comparison: raw outputs vs post-processed outputs
+- [ ] Measure impact on validation metrics
+
+### Key Metrics
+| Metric | Before Post-Processing | After Post-Processing (Target) |
+|--------|------------------------|--------------------------------|
+| Validation BLEU | 25-35 | 28-38 (+3) |
+| Validation chrF++ | 45-55 | 48-58 (+3) |
+| **Validation Geometric Mean** | **~33-44** | **~37-48** |
+| Proper noun accuracy | 75-85% | 85-95% (+10%) |
+
+### Success Criteria
+✓ Post-processing improves geometric mean by 3-5 points
+✓ Proper noun preservation rate increases
+✓ No hallucinations or content additions (faithfulness preserved)
+✓ Inference latency remains acceptable (<500ms per sentence)
+
+### Implementation Details
+
+**Mini-LLM Selection Criteria:**
+- Model size: 1-4B parameters (fast inference on CPU/consumer GPU)
+- Context length: 4k+ tokens (sufficient for sentence + context)
+- Instruction-following capability
+- Examples: `microsoft/Phi-3-mini-4k-instruct`, `meta-llama/Llama-3.2-1B-Instruct`
+
+**Post-Processing Prompt Template:**
+```
+You are a post-processing assistant for Old Assyrian translations. Your task is to clean and refine the translation while preserving all content faithfully.
+
+Input translation (from ByT5 model):
+{raw_translation}
+
+Original transliteration:
+{transliteration}
+
+Instructions:
+1. Fix any formatting errors (spacing, punctuation)
+2. Ensure proper nouns are capitalized correctly
+3. Verify Sumerograms are preserved (e.g., DUMU, KÙ.BABBAR)
+4. Improve fluency if needed, but DO NOT add or remove content
+5. Keep the translation literal and faithful to the source
+
+Output only the cleaned translation.
+```
+
+### Blockers / Risks
+- Post-processing may introduce hallucinations (mitigated by strict prompting)
+- Inference latency may increase (mitigated by using small models)
+- May not significantly improve scores if ByT5 outputs are already clean
+
+---
+
+## Phase 5: Iteration & Submission (Weeks 7-8)
 
 **Goal:** Error analysis, ensembling, final submission
 
@@ -216,7 +294,7 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 
 ### Tasks Breakdown
 
-#### Week 6-7: Error Analysis
+#### Week 7: Error Analysis
 - [ ] Categorize errors: proper nouns, Sumerograms, morphology, fluency
 - [ ] Identify systematic failures
 - [ ] Implement targeted fixes
@@ -224,7 +302,7 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
   - If gap handling poor → more augmentation
   - If fluency poor → adjust beam search / temperature
 
-#### Week 7-8: Final Training & Submission
+#### Week 8: Final Training & Submission
 - [ ] Retrain with fixes
 - [ ] Optional: Ensemble multiple models (different seeds, hyperparameters)
 - [ ] Generate test.csv predictions with `scripts/inference.py`
@@ -236,10 +314,13 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 |--------|-------------------|--------|---------|
 | Test BLEU | 0.00 | 30+ | 35+ |
 | Test chrF++ | 4.88 | 50+ | 55+ |
+| **Test Geometric Mean (SCORE)** | **0.00** | **~39+** | **~44+** |
 | Proper noun accuracy | 2.94% | 85%+ | 90%+ |
 
+> **Note:** Competition is scored on geometric mean: sqrt(BLEU × chrF). This is the official metric.
+
 ### Success Criteria
-✓ Test BLEU ≥ 30 (competitive with Akkademia baseline)
+✓ Test Geometric Mean ≥ 39 (competitive with Akkademia baseline)
 ✓ Submission uploaded before competition deadline
 ✓ All code documented and reproducible
 
@@ -256,8 +337,9 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 | 1 | Baseline | Zero-shot submission uploaded |
 | 2-3 | Data | 20-50k parallel pairs extracted |
 | 3-4 | Retrieval | FAISS index + lexicon operational |
-| 4-6 | Training | ByT5 fine-tuned, validation BLEU > 25 |
-| 6-8 | Iteration | Final submission, test BLEU ≥ 30 |
+| 4-6 | Training | ByT5 fine-tuned, validation geometric mean > 33 |
+| 6 | Post-Processing | Mini-LLM output refinement, +3-5 points |
+| 7-8 | Iteration | Final submission, test geometric mean ≥ 39 |
 
 ---
 
@@ -369,11 +451,11 @@ index if missing, then runs `scripts/train.py --config configs/training.yaml`.
 
 ## Reference Benchmarks
 
-| System | Corpus Size | BLEU | chrF++ | Notes |
-|--------|-------------|------|--------|-------|
-| **Akkademia (2023)** | 56k pairs | 36-37 | — | CNN-based, ORACC data |
-| **Zero-shot ByT5-small** | 0 (zero-shot) | 0.00 | 4.88 | Actual baseline (2026-01-31) |
-| **Target (this project)** | 20-50k pairs | 30+ | 50+ | Fine-tuned ByT5 + RAG |
+| System | Corpus Size | BLEU | chrF++ | Geometric Mean | Notes |
+|--------|-------------|------|--------|----------------|-------|
+| **Akkademia (2023)** | 56k pairs | 36-37 | — | — | CNN-based, ORACC data |
+| **Zero-shot ByT5-small** | 0 (zero-shot) | 0.00 | 4.88 | 0.00 | Actual baseline (2026-01-31) |
+| **Target (this project)** | 1.6k pairs | 30+ | 50+ | ~39+ | Fine-tuned ByT5 + RAG + post-processing |
 
 ---
 

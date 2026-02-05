@@ -4,12 +4,14 @@ Evaluation metrics for Akkadian NMT.
 Implements:
 - BLEU score
 - chrF++ score
+- Geometric mean (competition metric: sqrt(BLEU × chrF))
 - Proper noun accuracy
 """
 
 import logging
 from typing import List, Dict, Any, Optional
 import re
+import math
 
 import sacrebleu
 from collections import Counter
@@ -94,6 +96,29 @@ class MetricsCalculator:
         return {
             "chrf": chrf.score,
         }
+
+    def calculate_geometric_mean(
+        self,
+        bleu: float,
+        chrf: float,
+    ) -> float:
+        """
+        Calculate geometric mean of BLEU and chrF scores.
+
+        This is the official competition metric: sqrt(BLEU × chrF)
+
+        Args:
+            bleu: BLEU score
+            chrf: chrF score
+
+        Returns:
+            Geometric mean score
+        """
+        # Avoid math domain error with negative or zero values
+        if bleu <= 0 or chrf <= 0:
+            return 0.0
+
+        return math.sqrt(bleu * chrf)
 
     def calculate_proper_noun_accuracy(
         self,
@@ -191,7 +216,7 @@ class MetricsCalculator:
             source_texts: Optional source texts for proper noun accuracy
 
         Returns:
-            Dictionary with all metrics
+            Dictionary with all metrics including geometric_mean (competition metric)
         """
         # Ensure references are in list format for sacrebleu
         refs_list = [[ref] for ref in references]
@@ -205,6 +230,12 @@ class MetricsCalculator:
         # chrF++
         chrf_metrics = self.calculate_chrf(hypotheses, refs_list)
         metrics.update(chrf_metrics)
+
+        # Geometric mean (competition metric)
+        geometric_mean = self.calculate_geometric_mean(
+            metrics["bleu"], metrics["chrf"]
+        )
+        metrics["geometric_mean"] = geometric_mean
 
         # Proper noun accuracy (if source texts provided)
         if source_texts:
@@ -231,6 +262,12 @@ class MetricsCalculator:
 
         if "chrf" in metrics:
             logger.info(f"chrF++: {metrics['chrf']:.2f}")
+
+        # Highlight geometric mean as the competition metric
+        if "geometric_mean" in metrics:
+            logger.info("-" * 60)
+            logger.info(f"GEOMETRIC MEAN (COMPETITION SCORE): {metrics['geometric_mean']:.2f}")
+            logger.info("-" * 60)
 
         if "proper_noun_accuracy" in metrics:
             logger.info(
