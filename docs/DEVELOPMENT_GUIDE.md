@@ -47,6 +47,7 @@ akklang/
 │   │   ├── byt5_trainer.py       # ByT5 fine-tuning
 │   │   ├── augmentation.py       # Back-translation, synthetic gaps
 │   │   ├── context_assembler.py  # Combine RAG + lexicon + input
+│   │   ├── postprocessor.py      # Mini-LLM output refinement
 │   │   └── inference.py          # Generate translations
 │   │
 │   ├── evaluation/                # Metrics and analysis
@@ -196,7 +197,33 @@ akklang/
 
 ---
 
-### Phase 4: Iteration (Weeks 6-8)
+### Phase 4: Post-Processing (Week 6)
+**Goal:** Refine model outputs with mini-LLM
+
+**Tasks:**
+1. **Mini-LLM selection**
+   - Choose lightweight model: Phi-3-mini-4k-instruct or Llama-3.2-1B-Instruct
+   - Model size: 1-4B parameters (fast inference)
+   - Ensure instruction-following capability
+
+2. **Post-processor implementation** (`src/modeling/postprocessor.py`)
+   - Design prompts for output refinement
+   - Implement formatting fixes, proper noun correction
+   - Preserve Sumerograms and determinatives
+   - Improve fluency without adding content
+
+3. **Validation**
+   - A/B test: raw outputs vs post-processed
+   - Measure impact on validation metrics (target: +3-5 points)
+   - Verify no hallucinations introduced
+
+**Config:** Store post-processing parameters in `configs/postprocessing.yaml`
+
+**Integration:** Add to inference pipeline in `scripts/inference.py`
+
+---
+
+### Phase 5: Iteration (Weeks 7-8)
 **Goal:** Error analysis, ensembling, final submission
 
 **Tasks:**
@@ -332,8 +359,8 @@ python scripts/submit.py --predictions predictions.csv --output submission.csv
 2. **Preserve linguistic features**
    Proper nouns, Sumerograms, determinatives must survive preprocessing.
 
-3. **Evaluation beyond BLEU**
-   chrF++ more reliable for morphologically rich languages. Manual inspection essential.
+3. **Evaluation: Geometric Mean is King**
+   Competition scores on sqrt(BLEU × chrF). Both metrics matter equally. chrF++ more reliable for morphologically rich languages. Manual inspection essential.
 
 4. **Competition constraints**
    Remember: test data is sentence-level, train is document-level. Alignment matters.

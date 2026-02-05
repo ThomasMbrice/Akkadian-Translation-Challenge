@@ -173,6 +173,7 @@ def evaluate(trainer: ByT5Trainer, split_name: str, split_df: pd.DataFrame) -> d
     # Log summary
     logger.info(f"{split_name} BLEU:   {metrics.get('bleu', 0):.2f}")
     logger.info(f"{split_name} chrF++: {metrics.get('chrf', 0):.2f}")
+    logger.info(f"{split_name} >>> COMPETITION SCORE (Geometric Mean): {metrics.get('geometric_mean', 0):.2f} <<<")
     if "proper_noun_accuracy" in metrics:
         logger.info(
             f"{split_name} PN Acc: {metrics['proper_noun_accuracy']:.2%} "
@@ -344,9 +345,8 @@ def main():
         logging_steps=config["output"]["logging_steps"],
         gradient_accumulation_steps=train_cfg["gradient_accumulation_steps"],
         fp16=hw_cfg.get("fp16", False),
+        gradient_checkpointing=hw_cfg.get("gradient_checkpointing", False),
         early_stopping_patience=train_cfg.get("early_stopping_patience", 3),
-        generation_num_beams=train_cfg.get("generation_num_beams", 4),
-        generation_max_length=train_cfg.get("generation_max_length", 256),
         seed=config.get("seed", 42),
     )
 
