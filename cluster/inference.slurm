@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=akklang-inference
-#SBATCH --output=logs/slurm/inference_%j.out
-#SBATCH --error=logs/slurm/inference_%j.err
-#SBATCH --time=01:00:00
+#SBATCH --partition=a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/slurm/inference_%j.out
+#SBATCH --error=logs/slurm/inference_%j.err
 
 # Akkadian NMT: Generate test predictions
 # Phase 4: Weeks 6-8
@@ -40,17 +40,45 @@ mkdir -p "$PROJECT_ROOT/logs/slurm"
 # Bind paths for Singularity
 export SINGULARITY_BIND="$PROJECT_ROOT:/akklang"
 
-echo "Generating test set predictions..."
-singularity exec --nv "$CONTAINER" \
-    python /akklang/scripts/inference.py \
-    --config /akklang/configs/inference.yaml
+# Verify trained model exists
+if [ ! -d "$PROJECT_ROOT/models/byt5_finetuned" ]; then
+    echo "ERROR: Trained model not found. Run train.slurm first."
+    exit 1
+fi
 
+# Step 1: Generate predictions
+echo "Generating test set predictions..."
+if ! singularity exec --nv "$CONTAINER" \
+    python /akklang/scripts/inference.py \
+    --config /akklang/configs/inference.yaml; then
+    echo "ERROR: Inference failed"
+    exit 1
+fi
+
+# Verify predictions were created
+if [ ! -f "$PROJECT_ROOT/predictions.csv" ]; then
+    echo "ERROR: Inference did not create predictions.csv"
+    exit 1
+fi
+echo "✓ Predictions generated"
+
+# Step 2: Create submission file
 echo ""
 echo "Creating competition submission..."
-singularity exec --nv "$CONTAINER" \
+if ! singularity exec --nv "$CONTAINER" \
     python /akklang/scripts/submit.py \
     --predictions /akklang/predictions.csv \
-    --output /akklang/submission.csv
+    --output /akklang/submission.csv; then
+    echo "ERROR: Submission file creation failed"
+    exit 1
+fi
+
+# Verify submission file was created
+if [ ! -f "$PROJECT_ROOT/submission.csv" ]; then
+    echo "ERROR: submit.py did not create submission.csv"
+    exit 1
+fi
+echo "✓ Submission file created"
 
 echo ""
 echo "=========================================="

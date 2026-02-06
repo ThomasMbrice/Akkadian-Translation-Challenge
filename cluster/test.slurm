@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=akklang-test
-#SBATCH --output=logs/slurm/test_%j.out
-#SBATCH --error=logs/slurm/test_%j.err
-#SBATCH --time=00:15:00
+#SBATCH --partition=a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --gres=gpu:1
-#SBATCH --partition=gpu
+#SBATCH --time=00:15:00
+#SBATCH --output=logs/slurm/test_%j.out
+#SBATCH --error=logs/slurm/test_%j.err
 
 # Akkadian NMT: Container Test
 # Verifies Singularity container and all dependencies
@@ -54,10 +54,14 @@ export SINGULARITY_BIND="$PROJECT_ROOT:/akklang"
 echo "Running container tests..."
 echo ""
 
-singularity exec --nv "$CONTAINER" \
-    python /akklang/scripts/test_container.py
-
-EXIT_CODE=$?
+# Run test with explicit error handling
+if ! singularity exec --nv "$CONTAINER" python /akklang/scripts/test_container.py; then
+    EXIT_CODE=$?
+    echo ""
+    echo "Container test failed with exit code $EXIT_CODE"
+else
+    EXIT_CODE=0
+fi
 
 echo ""
 echo "=========================================="
