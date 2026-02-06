@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=akklang-test
-#SBATCH --output=logs/slurm/test_%j.out
-#SBATCH --error=logs/slurm/test_%j.err
-#SBATCH --time=00:15:00
+#SBATCH --partition=a100
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --mem=16G
 #SBATCH --gres=gpu:1
-#SBATCH --partition=a100
+#SBATCH --time=00:15:00
+#SBATCH --output=logs/slurm/test_%j.out
+#SBATCH --error=logs/slurm/test_%j.err
 
 # Akkadian NMT: Container Test
 # Verifies Singularity container and all dependencies

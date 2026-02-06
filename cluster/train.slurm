@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=akklang-train
-#SBATCH --output=logs/slurm/train_%j.out
-#SBATCH --error=logs/slurm/train_%j.err
-#SBATCH --time=48:00:00
+#SBATCH --partition=a100-long
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --gres=gpu:1
-#SBATCH --partition=a100-long
+#SBATCH --time=48:00:00
+#SBATCH --output=logs/slurm/train_%j.out
+#SBATCH --error=logs/slurm/train_%j.err
 
 # Akkadian NMT: ByT5 Fine-tuning with RAG
 # Phase 3: Weeks 4-6

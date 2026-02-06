@@ -5,431 +5,56 @@ This directory contains scripts for running the Akkadian NMT pipeline on a remot
 ## Quick Start
 
 ```bash
-# 1. Upload project to cluster
-rsync -avz --exclude='*.sif' --exclude='data/' akklang/ user@cluster:/home/user/akklang/
+# 1. Upload to cluster
+rsync -avz --exclude='*.sif' akklang/ user@cluster:/home/user/akklang/
 
-# 2. SSH to cluster
+# 2. Build container
 ssh user@cluster
-
-# 3. Build container (one-time setup, ~15 minutes)
 cd ~/akklang
 ./cluster/build_container.sh
 
-# 4. Submit baseline job
+# 3. Test
+./cluster/submit_job.sh test
+
+# 4. Run baseline
 ./cluster/submit_job.sh baseline
-
-# 5. Monitor job
-squeue -u $USER
-tail -f logs/slurm/baseline_*.out
 ```
 
----
+## Jobs
 
-## Infrastructure
-
-### Singularity Container (`singularity.def`)
-
-**Base:** NVIDIA CUDA 11.8 with cuDNN 8
-**Python:** 3.10 via Miniconda
-**Key packages:**
-- PyTorch 2.1+ with CUDA 11.8
-- Hugging Face Transformers (ByT5)
-- FAISS-GPU for vector search
-- Sentence transformers for embeddings
-
-**Build command:**
+### Submit
 ```bash
-singularity build --fakeroot akklang.sif singularity.def
+./cluster/submit_job.sh test       # Test container (15 min)
+./cluster/submit_job.sh baseline   # Zero-shot baseline (2 hours)
+./cluster/submit_job.sh extract    # Extract data (24 hours, CPU)
+./cluster/submit_job.sh train      # Train model (48 hours)
+./cluster/submit_job.sh inference  # Generate submission (1 hour)
 ```
 
-**Test command:**
+### Monitor
 ```bash
-singularity exec --nv akklang.sif python -c "import torch; print(torch.cuda.is_available())"
+squeue -u $USER                    # Check status
+tail -f logs/slurm/*.out           # View output
+scancel <job_id>                   # Cancel job
 ```
 
----
+## Resources
 
-## SLURM Jobs
+| Job | Time | Partition | GPU | CPUs | RAM |
+|-----|------|-----------|-----|------|-----|
+| test | 15m | a100 | 1 | 2 | 16GB |
+| baseline | 2h | a100 | 1 | 4 | 32GB |
+| extract | 24h | long-40core-shared | - | 16 | 128GB |
+| train | 48h | a100-long | 1 | 8 | 64GB |
+| inference | 1h | a100 | 1 | 4 | 32GB |
 
-All jobs use the `akklang.sif` container and bind the project directory to `/akklang` inside the container.
+## Partitions
 
-**Error Handling:** All scripts include:
-- Validation of input files before processing
-- Error checking after each step
-- Verification that expected outputs were created
-- Descriptive error messages with exit codes
+Scripts use: `a100`, `a100-long`, `long-40core-shared`
 
-### 1. Baseline (`baseline.slurm`)
-
-**Phase:** 0 (Week 1)
-**Duration:** ~2 hours
-**Resources:** 1 GPU, 32GB RAM, 4 CPUs
-**Purpose:** Zero-shot ByT5 baseline
-
-```bash
-sbatch cluster/baseline.slurm
-```
-
-**Outputs:**
-- `outputs/baseline_results.json` - Metrics (BLEU, chrF++)
-- `predictions.csv` - Test set predictions
-
-**Expected scores:**
-| Metric | Target |
-|--------|--------|
-| BLEU | 5-10 |
-| chrF++ | 20-30 |
-
----
-
-### 2. Extract Publications (`extract_publications.slurm`)
-
-**Phase:** 1 (Weeks 2-3)
-**Duration:** ~24 hours
-**Resources:** 16 CPUs, 128GB RAM (CPU-only)
-**Purpose:** Extract 20-50k parallel pairs from 900 publications
-
-```bash
-sbatch cluster/extract_publications.slurm
-```
-
-**Outputs:**
-- `data/processed/extracted_corpus.csv` - Raw extraction
-- `data/processed/deduplicated_corpus.csv` - After deduplication
-- `data/processed/combined_corpus.csv` - Merged with train.csv
-
-**Critical path:** This step multiplies training data by 2-3x.
-
----
-
-### 3. Training (`train.slurm`)
-
-**Phase:** 3 (Weeks 4-6)
-**Duration:** ~48 hours
-**Resources:** 1 A100 GPU, 64GB RAM, 8 CPUs
-**Purpose:** Fine-tune ByT5 with RAG
-
-```bash
-sbatch cluster/train.slurm
-```
-
-**Outputs:**
-- `models/byt5_finetuned/` - Model checkpoints
-- `logs/training/` - Training logs (loss, metrics)
-
-**Target validation BLEU:** 25+
-
-**Hyperparameters** (see `configs/training.yaml`):
-- Learning rate: 5e-5
-- Batch size: 8 per device, 2 gradient accumulation steps
-- Epochs: 10
-- RAG: Top-3 retrieved examples
-
----
-
-### 4. Inference (`inference.slurm`)
-
-**Phase:** 4 (Weeks 6-8)
-**Duration:** ~1 hour
-**Resources:** 1 GPU, 32GB RAM, 4 CPUs
-**Purpose:** Generate test set predictions for submission
-
-```bash
-sbatch cluster/inference.slurm
-```
-
-**Outputs:**
-- `predictions.csv` - Model predictions
-- `submission.csv` - Competition-ready submission
-
-**Upload to Kaggle:**
-```bash
-kaggle competitions submit \
-  -c deep-past-initiative-machine-translation \
-  -f submission.csv \
-  -m "ByT5 + RAG, BLEU XX"
-```
-
----
-
-## Job Management
-
-### Submit jobs
-```bash
-./cluster/submit_job.sh baseline   # Phase 0
-./cluster/submit_job.sh extract    # Phase 1
-./cluster/submit_job.sh train      # Phase 3
-./cluster/submit_job.sh inference  # Phase 4
-```
-
-### Monitor jobs
-```bash
-# List your jobs
-squeue -u $USER
-
-# Show job details
-scontrol show job <job_id>
-
-# Cancel job
-scancel <job_id>
-
-# View live output
-tail -f logs/slurm/baseline_*.out
-
-# Check GPU usage (on compute node)
-nvidia-smi
-```
-
-### Resource Requests
-
-| Job | Time | Partition | GPU | CPUs | RAM | Notes |
-|-----|------|-----------|-----|------|-----|-------|
-| Test | 15m | a100 | 1x A100 | 2 | 16GB | Container validation |
-| Baseline | 2h | a100 | 1x A100 | 4 | 32GB | Zero-shot evaluation |
-| Extract | 24h | long-40core | None | 16 | 128GB | CPU-only, parallel processing |
-| Train | 48h | a100-long | 1x A100 | 8 | 64GB | Requires long time limit |
-| Inference | 1h | a100 | 1x A100 | 4 | 32GB | Competition submission |
-
----
-
-## Directory Structure
-
-```
-akklang/
-├── singularity.def         # Container definition
-├── akklang.sif            # Built container (gitignored)
-├── cluster/
-│   ├── README.md          # This file
-│   ├── build_container.sh # Build Singularity image
-│   ├── submit_job.sh      # Job submission helper
-│   ├── baseline.slurm     # Phase 0: Baseline
-│   ├── extract_publications.slurm  # Phase 1: Data
-│   ├── train.slurm        # Phase 3: Training
-│   └── inference.slurm    # Phase 4: Submission
-├── logs/slurm/            # Job outputs (auto-created)
-├── data/                  # Data files (sync to cluster)
-├── models/                # Model checkpoints (large!)
-└── configs/               # YAML configs
-```
-
----
-
-## Cluster-Specific Configuration
-
-**IMPORTANT**: The SLURM scripts in this repository are configured for a cluster with the following partition structure. If your cluster uses different partition names, you'll need to update the `#SBATCH --partition=` directives in each `.slurm` file.
-
-### Current Configuration
-
-The scripts are configured for a cluster with:
-
-**GPU Partitions:**
-- `a100` - Standard A100 partition (8 hour time limit)
-- `a100-large` - Large A100 jobs (8 hour time limit)
-- `a100-long` - Long-running A100 jobs (48 hour time limit)
-
-**CPU Partitions:**
-- `short-40core` - Short CPU jobs (4 hour time limit)
-- `medium-40core` - Medium CPU jobs (12 hour time limit)
-- `long-40core` - Long CPU jobs (48 hour time limit)
-- `extended-40core` - Extended CPU jobs (7 day time limit)
-
-**Job Partition Assignments:**
-- `test.slurm` → `a100` (15 minutes, GPU)
-- `baseline.slurm` → `a100` (2 hours, GPU)
-- `train.slurm` → `a100-long` (48 hours, GPU)
-- `inference.slurm` → `a100` (1 hour, GPU)
-- `extract_publications.slurm` → `long-40core` (24 hours, CPU-only)
-
-### Adapting to Your Cluster
-
-To check your cluster's available partitions:
+Check your cluster:
 ```bash
 sinfo
 ```
 
-If your cluster uses different partition names, update the `.slurm` files:
-
-**Example 1: Simple gpu/cpu partitions**
-```bash
-# If your cluster uses generic 'gpu' and 'cpu' partitions:
-sed -i 's/partition=a100/partition=gpu/g' cluster/test.slurm
-sed -i 's/partition=a100/partition=gpu/g' cluster/baseline.slurm
-sed -i 's/partition=a100-long/partition=gpu/g' cluster/train.slurm
-sed -i 's/partition=a100/partition=gpu/g' cluster/inference.slurm
-sed -i 's/partition=long-40core/partition=cpu/g' cluster/extract_publications.slurm
-```
-
-**Example 2: V100 GPUs instead of A100**
-```bash
-# Update partition names
-sed -i 's/partition=a100/partition=v100/g' cluster/*.slurm
-# Update GPU resource requests if needed
-sed -i 's/gres=gpu:1/gres=gpu:v100:1/g' cluster/*.slurm
-```
-
-### Resource Limits
-
-Check your cluster's limits:
-```bash
-# Show partition info
-sinfo
-
-# Show your resource limits
-sacctmgr show assoc user=$USER format=User,Account,Partition,MaxJobs,MaxSubmit
-
-# Show QOS limits
-sacctmgr show qos format=Name,MaxWall,MaxSubmit,MaxJobsPU
-```
-
----
-
-## Data Transfer
-
-### Initial upload (from local machine)
-```bash
-# Sync project (exclude large files)
-rsync -avz --progress \
-  --exclude='*.sif' \
-  --exclude='data/raw/*.zip' \
-  --exclude='models/' \
-  --exclude='outputs/' \
-  akklang/ user@cluster:/home/user/akklang/
-
-# Or use SCP for specific files
-scp -r data/raw/*.csv user@cluster:/home/user/akklang/data/raw/
-```
-
-### Download results (to local machine)
-```bash
-# Download predictions
-scp user@cluster:/home/user/akklang/submission.csv .
-
-# Download model checkpoint
-rsync -avz --progress \
-  user@cluster:/home/user/akklang/models/byt5_finetuned/ \
-  models/byt5_finetuned/
-
-# Download logs
-rsync -avz user@cluster:/home/user/akklang/logs/ logs/
-```
-
----
-
-## Troubleshooting
-
-### Container build fails
-```bash
-# If you don't have fakeroot:
-singularity build --remote akklang.sif singularity.def
-
-# Or use Sylabs cloud build:
-# 1. Create account at https://cloud.sylabs.io
-# 2. Generate token: singularity remote login
-# 3. Build remotely: singularity build --remote akklang.sif singularity.def
-```
-
-### Job fails immediately
-```bash
-# Check error log
-cat logs/slurm/baseline_<job_id>.err
-
-# Common issues:
-# - Container not found: Run ./cluster/build_container.sh first
-# - Data not found: Check PROJECT_ROOT environment variable
-# - Permission denied: chmod +x cluster/*.sh
-```
-
-### Out of memory (OOM)
-```bash
-# Reduce batch size in configs/training.yaml:
-per_device_train_batch_size: 4  # Was 8
-gradient_accumulation_steps: 4  # Was 2
-
-# Enable gradient checkpointing:
-gradient_checkpointing: true
-```
-
-### CUDA out of memory
-```bash
-# Use smaller model
-model:
-  name: google/byt5-small  # Was google/byt5-base
-
-# Or use CPU for baseline (slow!)
-#SBATCH --gres=gpu:0
-#SBATCH --partition=cpu
-```
-
-### Job stuck in queue
-```bash
-# Check queue status
-squeue
-
-# Check why pending
-squeue -u $USER --start
-
-# Request different resources if queue is full
-#SBATCH --gres=gpu:v100:1  # Try V100 instead of A100
-```
-
----
-
-## Testing Container Locally (Optional)
-
-If you have Singularity on your local machine:
-
-```bash
-# Build locally
-singularity build akklang.sif singularity.def
-
-# Test Python
-singularity exec akklang.sif python -c "import torch; print(torch.__version__)"
-
-# Test with GPU (requires NVIDIA driver)
-singularity exec --nv akklang.sif python -c "import torch; print(torch.cuda.is_available())"
-
-# Run interactive shell
-singularity shell --nv akklang.sif
-```
-
----
-
-## Next Steps After Setup
-
-1. **Phase 0 (Week 1):** Run baseline
-   ```bash
-   ./cluster/submit_job.sh baseline
-   ```
-
-2. **Phase 1 (Weeks 2-3):** Extract publications
-   ```bash
-   ./cluster/submit_job.sh extract
-   ```
-
-3. **Phase 2 (Weeks 3-4):** Build retrieval index (runs automatically in training job)
-
-4. **Phase 3 (Weeks 4-6):** Train model
-   ```bash
-   ./cluster/submit_job.sh train
-   ```
-
-5. **Phase 4 (Weeks 6-8):** Generate submission
-   ```bash
-   ./cluster/submit_job.sh inference
-   ```
-
-See `docs/ROADMAP.md` for detailed timeline and milestones.
-
----
-
-## Support
-
-- **SLURM docs:** https://slurm.schedmd.com/
-- **Singularity docs:** https://sylabs.io/docs/
-- **Cluster-specific help:** Contact your HPC support team
-
-**Common commands:**
-- `man sbatch` - SLURM batch submission
-- `man squeue` - Queue status
-- `man scancel` - Cancel jobs
-- `singularity --help` - Singularity help
+Edit `#SBATCH --partition=` in `.slurm` files if different.

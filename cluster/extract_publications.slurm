@@ -1,13 +1,13 @@
 #!/bin/bash
 #SBATCH --job-name=akklang-extract
-#SBATCH --output=logs/slurm/extract_%j.out
-#SBATCH --error=logs/slurm/extract_%j.err
-#SBATCH --time=24:00:00
+#SBATCH --partition=long-40core-shared
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
-#SBATCH --partition=long-40core
+#SBATCH --time=24:00:00
+#SBATCH --output=logs/slurm/extract_%j.out
+#SBATCH --error=logs/slurm/extract_%j.err
 
 # Akkadian NMT: Publication Data Extraction
 # Phase 1: Weeks 2-3
