@@ -53,6 +53,12 @@ singularity exec --nv akklang.sif python -c "import torch; print(torch.cuda.is_a
 
 All jobs use the `akklang.sif` container and bind the project directory to `/akklang` inside the container.
 
+**Error Handling:** All scripts include:
+- Validation of input files before processing
+- Error checking after each step
+- Verification that expected outputs were created
+- Descriptive error messages with exit codes
+
 ### 1. Baseline (`baseline.slurm`)
 
 **Phase:** 0 (Week 1)
@@ -174,14 +180,15 @@ tail -f logs/slurm/baseline_*.out
 nvidia-smi
 ```
 
-### Resource requests
+### Resource Requests
 
-| Job | Time | GPU | CPUs | RAM | Notes |
-|-----|------|-----|------|-----|-------|
-| Baseline | 2h | 1x V100 | 4 | 32GB | Zero-shot |
-| Extract | 24h | None | 16 | 128GB | CPU-heavy |
-| Train | 48h | 1x A100 | 8 | 64GB | Prefers A100 |
-| Inference | 1h | 1x V100 | 4 | 32GB | Any GPU |
+| Job | Time | Partition | GPU | CPUs | RAM | Notes |
+|-----|------|-----------|-----|------|-----|-------|
+| Test | 15m | a100 | 1x A100 | 2 | 16GB | Container validation |
+| Baseline | 2h | a100 | 1x A100 | 4 | 32GB | Zero-shot evaluation |
+| Extract | 24h | long-40core | None | 16 | 128GB | CPU-only, parallel processing |
+| Train | 48h | a100-long | 1x A100 | 8 | 64GB | Requires long time limit |
+| Inference | 1h | a100 | 1x A100 | 4 | 32GB | Competition submission |
 
 ---
 
@@ -207,31 +214,57 @@ akklang/
 
 ---
 
-## Cluster-Specific Adjustments
+## Cluster-Specific Configuration
 
-### SLURM Partition Names
+**IMPORTANT**: The SLURM scripts in this repository are configured for a cluster with the following partition structure. If your cluster uses different partition names, you'll need to update the `#SBATCH --partition=` directives in each `.slurm` file.
 
-Update `#SBATCH --partition=` in `.slurm` files if your cluster uses different names:
+### Current Configuration
 
+The scripts are configured for a cluster with:
+
+**GPU Partitions:**
+- `a100` - Standard A100 partition (8 hour time limit)
+- `a100-large` - Large A100 jobs (8 hour time limit)
+- `a100-long` - Long-running A100 jobs (48 hour time limit)
+
+**CPU Partitions:**
+- `short-40core` - Short CPU jobs (4 hour time limit)
+- `medium-40core` - Medium CPU jobs (12 hour time limit)
+- `long-40core` - Long CPU jobs (48 hour time limit)
+- `extended-40core` - Extended CPU jobs (7 day time limit)
+
+**Job Partition Assignments:**
+- `test.slurm` → `a100` (15 minutes, GPU)
+- `baseline.slurm` → `a100` (2 hours, GPU)
+- `train.slurm` → `a100-long` (48 hours, GPU)
+- `inference.slurm` → `a100` (1 hour, GPU)
+- `extract_publications.slurm` → `long-40core` (24 hours, CPU-only)
+
+### Adapting to Your Cluster
+
+To check your cluster's available partitions:
 ```bash
-# Common partition names:
-gpu       # GPU partition (baseline, train, inference)
-cpu       # CPU partition (extract)
-a100      # A100-specific partition
-v100      # V100-specific partition
-short     # Short jobs (<4h)
-long      # Long jobs (>24h)
+sinfo
 ```
 
-### GPU Types
+If your cluster uses different partition names, update the `.slurm` files:
 
-Update `#SBATCH --gres=gpu:` to request specific GPUs:
-
+**Example 1: Simple gpu/cpu partitions**
 ```bash
-gpu:1         # Any GPU
-gpu:v100:1    # V100 (16GB VRAM)
-gpu:a100:1    # A100 (40GB VRAM, preferred)
-gpu:a100_80:1 # A100 80GB
+# If your cluster uses generic 'gpu' and 'cpu' partitions:
+sed -i 's/partition=a100/partition=gpu/g' cluster/test.slurm
+sed -i 's/partition=a100/partition=gpu/g' cluster/baseline.slurm
+sed -i 's/partition=a100-long/partition=gpu/g' cluster/train.slurm
+sed -i 's/partition=a100/partition=gpu/g' cluster/inference.slurm
+sed -i 's/partition=long-40core/partition=cpu/g' cluster/extract_publications.slurm
+```
+
+**Example 2: V100 GPUs instead of A100**
+```bash
+# Update partition names
+sed -i 's/partition=a100/partition=v100/g' cluster/*.slurm
+# Update GPU resource requests if needed
+sed -i 's/gres=gpu:1/gres=gpu:v100:1/g' cluster/*.slurm
 ```
 
 ### Resource Limits
