@@ -13,4 +13,10 @@
 | #98 | 4:50 PM | 🔵 | SLURM Test Job for Container Validation | ~492 |
 | #97 | 4:49 PM | 🔵 | Singularity Container Build Script with Fakeroot Support | ~414 |
 | #94 | 4:48 PM | 🔵 | GPU Cluster Infrastructure for Akkadian NMT Pipeline | ~416 |
+
+### Feb 10, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #115 | 4:08 PM | 🔵 | SLURM Job Log File Locations Discovered | ~360 |
 </claude-mem-context>
