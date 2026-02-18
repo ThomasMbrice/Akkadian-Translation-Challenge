@@ -108,7 +108,7 @@ def setup_retrieval(config: dict):
     return retriever, retriever.lexicon
 
 
-def setup_augmenter(config: dict) -> Augmenter | None:
+def setup_augmenter(config: dict):
     """Create Augmenter if synthetic-gap augmentation is enabled."""
     aug_cfg = config["data"].get("augmentation", {})
     if not aug_cfg.get("enabled", False) or not aug_cfg.get("synthetic_gaps", {}).get("enabled", False):
@@ -125,7 +125,7 @@ def setup_augmenter(config: dict) -> Augmenter | None:
     )
 
 
-def setup_assembler(config: dict, retriever, lexicon) -> ContextAssembler | None:
+def setup_assembler(config: dict, retriever, lexicon):
     """Build a ContextAssembler wired to the retriever/lexicon (or None if no RAG)."""
     if retriever is None and lexicon is None:
         return None
