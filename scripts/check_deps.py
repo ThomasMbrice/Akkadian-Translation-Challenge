@@ -23,14 +23,15 @@ PASS = "[OK]"
 FAIL = "[FAIL]"
 
 
-def check(label, fn):
+def check(label, fn, warn_only=False):
     try:
         fn()
         print(f"  {PASS}  {label}")
         return True
     except Exception as e:
-        print(f"  {FAIL}  {label}: {e}")
-        return False
+        tag = "[WARN]" if warn_only else FAIL
+        print(f"  {tag}  {label}: {e}")
+        return warn_only  # warn_only=True means don't count as failure
 
 
 def main():
@@ -57,7 +58,7 @@ def main():
     print("\n--- Packages ---")
     packages = [
         ("torch", "import torch"),
-        ("torch CUDA", "import torch; assert torch.cuda.is_available(), 'no CUDA'"),
+        ("torch", "import torch"),
         ("transformers", "import transformers"),
         ("datasets", "import datasets"),
         ("pandas", "import pandas"),
@@ -70,6 +71,12 @@ def main():
     for label, stmt in packages:
         if not check(label, lambda s=stmt: exec(s)):
             failures += 1
+
+    check(
+        "torch CUDA (login nodes have no GPU — warning only)",
+        lambda: (_ for _ in ()).throw(AssertionError("no CUDA")) if not __import__("torch").cuda.is_available() else None,
+        warn_only=True,
+    )
 
     # ------------------------------------------------------------------
     # 3. Project module imports
