@@ -29,6 +29,10 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# Project root is three levels up: src/retrieval/lexicon.py -> src/retrieval -> src -> project root
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DATA_DIR = _PROJECT_ROOT / "data" / "raw" / "deep-past-initiative-machine-translation"
+
 
 class Lexicon:
     """
@@ -39,8 +43,8 @@ class Lexicon:
 
     def __init__(
         self,
-        oa_lexicon_path: str = "data/raw/deep-past-initiative-machine-translation/OA_Lexicon_eBL.csv",
-        ebl_dict_path: str = "data/raw/deep-past-initiative-machine-translation/eBL_Dictionary.csv",
+        oa_lexicon_path=None,
+        ebl_dict_path=None,
         fuzzy_threshold: float = 0.8,
     ):
         """
@@ -49,8 +53,8 @@ class Lexicon:
             ebl_dict_path: Path to eBL_Dictionary.csv
             fuzzy_threshold: Minimum similarity score for fuzzy matches (0.0-1.0)
         """
-        self.oa_lexicon_path = oa_lexicon_path
-        self.ebl_dict_path = ebl_dict_path
+        self.oa_lexicon_path = oa_lexicon_path or str(_DATA_DIR / "OA_Lexicon_eBL.csv")
+        self.ebl_dict_path = ebl_dict_path or str(_DATA_DIR / "eBL_Dictionary.csv")
         self.fuzzy_threshold = fuzzy_threshold
 
         # Storage
