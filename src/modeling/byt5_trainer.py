@@ -268,9 +268,12 @@ class ByT5Trainer:
             translation_col=translation_col,
         )
 
-        # Mixed precision: fp16 on CUDA, bf16 on MPS, nothing on CPU
-        use_fp16 = fp16 and self.device == "cuda"
-        use_bf16 = self.device == "mps"
+        # Mixed precision: prefer bf16 on CUDA (A100/H100 support it natively,
+        # numerically stable — fp16 overflows on long ByT5 byte sequences).
+        # Fall back to fp16 only on older GPUs that lack bf16 support.
+        cuda_has_bf16 = self.device == "cuda" and torch.cuda.is_bf16_supported()
+        use_bf16 = cuda_has_bf16 or self.device == "mps"
+        use_fp16 = fp16 and self.device == "cuda" and not cuda_has_bf16
 
         # Set up training arguments
         training_args = Seq2SeqTrainingArguments(
