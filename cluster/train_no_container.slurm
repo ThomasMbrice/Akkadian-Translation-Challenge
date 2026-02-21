@@ -50,15 +50,6 @@ if [ ! -f "$PROJECT_ROOT/data/processed/combined_corpus.csv" ]; then
     exit 1
 fi
 
-# Build FAISS index if needed
-if [ ! -f "$PROJECT_ROOT/data/indices/faiss_index.bin" ]; then
-    echo "Building FAISS index..."
-    mkdir -p "$PROJECT_ROOT/data/indices"
-    python "$PROJECT_ROOT/scripts/build_index.py" \
-        --corpus "$PROJECT_ROOT/data/processed/combined_corpus.csv" \
-        --output "$PROJECT_ROOT/data/indices/faiss_index.bin"
-fi
-
 # Train
 echo "Starting training at $(date)"
 python "$PROJECT_ROOT/scripts/train.py" --config "$PROJECT_ROOT/configs/training.yaml"
