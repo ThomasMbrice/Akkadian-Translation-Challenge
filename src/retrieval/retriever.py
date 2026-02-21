@@ -24,6 +24,8 @@ import pandas as pd
 from src.retrieval.lexicon import Lexicon
 from src.retrieval.embedder import Embedder
 from src.retrieval.index_builder import IndexBuilder
+from src.retrieval.bm25_index import BM25Index
+from src.retrieval.genre import classify_genre
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,10 @@ class Retriever:
         self.embedder: Optional[Embedder] = None
         self.index: Optional[IndexBuilder] = None
         self.corpus: Optional[pd.DataFrame] = None
+
+        # BM25 retrieval (Akkadian-side)
+        self.bm25: Optional[BM25Index] = None
+        self.genre_labels: Optional[List[str]] = None
 
     # ------------------------------------------------------------------
     # Loading
@@ -110,6 +116,19 @@ class Retriever:
                 f"Corpus size ({len(self.corpus)}) does not match index size "
                 f"({self.index.n_vectors})"
             )
+
+        # Build BM25 index on Akkadian side
+        logger.info("Building BM25 index on Akkadian transliterations...")
+        self.bm25 = BM25Index()
+        self.bm25.build(self.corpus["transliteration"].fillna("").tolist())
+
+        # Pre-classify corpus by genre
+        logger.info("Classifying corpus by genre...")
+        self.genre_labels = [
+            classify_genre(t) for t in self.corpus["transliteration"].fillna("")
+        ]
+        from collections import Counter
+        logger.info(f"Corpus genre distribution: {dict(Counter(self.genre_labels))}")
 
         logger.info("=" * 60)
         logger.info("RETRIEVAL SYSTEM READY")
@@ -231,6 +250,72 @@ class Retriever:
             all_results.append(results)
 
         return all_results
+
+    def retrieve_bm25(
+        self,
+        query: str,
+        k: int = 3,
+        min_score: float = 0.5,
+    ) -> List[Dict]:
+        """
+        Genre-filtered BM25 retrieval on the Akkadian side.
+
+        Strategy:
+        1. Classify query genre
+        2. Filter corpus to same genre (hard filter)
+        3. Rank filtered pool by BM25 score
+        4. Return up to k examples above min_score threshold
+        5. If genre is "unknown" or no genre match, fall back to unfiltered BM25
+
+        Args:
+            query: Akkadian transliteration query
+            k: Maximum number of results
+            min_score: Minimum BM25 score to include (skip weak matches)
+
+        Returns:
+            List of dicts with transliteration, translation, score, rank, corpus_index
+        """
+        if self.bm25 is None or self.genre_labels is None:
+            raise RuntimeError("BM25 index not loaded. Call load() first.")
+
+        query_genre = classify_genre(query)
+
+        # Build genre-filtered candidate index list
+        if query_genre != "unknown":
+            genre_indices = [
+                i for i, g in enumerate(self.genre_labels) if g == query_genre
+            ]
+        else:
+            genre_indices = None  # unfiltered fallback
+
+        hits = self.bm25.search(query, k=k, indices=genre_indices, min_score=min_score)
+
+        # If filtered search returned nothing, fall back to unfiltered
+        if not hits and genre_indices is not None:
+            hits = self.bm25.search(query, k=k, indices=None, min_score=min_score)
+
+        results = []
+        for rank, (idx, score) in enumerate(hits, start=1):
+            row = self.corpus.iloc[idx]
+            results.append({
+                "transliteration": row["transliteration"],
+                "translation": row["translation"],
+                "score": score,
+                "rank": rank,
+                "corpus_index": int(idx),
+                "genre": self.genre_labels[idx],
+            })
+
+        return results
+
+    def retrieve_bm25_batch(
+        self,
+        queries: List[str],
+        k: int = 3,
+        min_score: float = 0.5,
+    ) -> List[List[Dict]]:
+        """retrieve_bm25 for multiple queries."""
+        return [self.retrieve_bm25(q, k=k, min_score=min_score) for q in queries]
 
     # ------------------------------------------------------------------
     # Query Context Building

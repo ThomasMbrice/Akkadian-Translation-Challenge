@@ -104,61 +104,64 @@ This roadmap tracks progress toward the Deep Past Challenge competition goal: bu
 - [x] Retriever interface (`src/retrieval/retriever.py`)
 - [x] FAISS index saved to `data/indices/faiss_index.bin`
 - [x] Build script (`scripts/build_index.py`)
-
-### Tasks Breakdown
-
-#### Week 3: Lexicon & Embeddings
-- [ ] Load OA_Lexicon_eBL.csv → proper noun dictionary
-- [ ] Load eBL_Dictionary.csv → Sumerogram mappings
-- [ ] Implement fuzzy matching for inflected forms
-- [ ] Embed English side of corpus with sentence-transformers
-
-#### Week 4: Indexing & Retrieval
-- [ ] Build FAISS index over embeddings
-- [ ] Implement k=5 retrieval
-- [ ] Test retrieval on validation set (letter formulas, contracts, etc.)
+- [x] **RAG Redesign (2026-02-20):** Genre classifier, BM25 index, genre-filtered retrieval, letter formula detector
 
 ### Key Metrics
-| Metric | Target | Actual |
-|--------|--------|--------|
-| Lexicon coverage | 90%+ of proper nouns | ~95% (loaded full lexicon) |
-| Retrieval precision@5 | 60%+ relevant examples | Not formally evaluated |
-| Retrieval latency | <100ms per query | ~50ms |
+| Metric | Target | Actual (FAISS/English) | Actual (BM25/Akkadian) |
+|--------|--------|------------------------|------------------------|
+| Genre precision | 85%+ | 21.2% | **91.8%** ✓ |
+| Content overlap | 20%+ | 6.5% | **46.4%** ✓ |
+| Duplicate retrievals | 0 | 0 | 2 (minor) |
 
 ### Success Criteria
-✓ Given input, retriever returns 5 similar Akkadian-English pairs
+✓ Given input, retriever returns genre-matched Akkadian-English pairs
 ✓ Proper nouns resolved via lexicon lookup
 ✓ Sumerograms mapped correctly (e.g., DUMU → "son")
+✓ Genre precision ≥ 85% on validation set
+✓ Content overlap ≥ 20% on validation set
 
-### Implementation Details (2026-02-02)
-**Components built:**
-1. **Lexicon (`src/retrieval/lexicon.py`):**
-   - Loads OA_Lexicon_eBL.csv (proper nouns) + eBL_Dictionary.csv (Sumerograms)
-   - Exact and fuzzy matching (80% threshold)
-   - Extracts proper nouns and Sumerograms from transliterated text
+### Implementation Details
 
-2. **Embedder (`src/retrieval/embedder.py`):**
-   - Sentence-transformers model: `all-MiniLM-L6-v2` (384-dim, fast)
-   - Embeds English translations (no Akkadian embedder exists)
-   - Batch processing with progress bars
+**Original components (2026-02-02):**
+1. **Lexicon (`src/retrieval/lexicon.py`):** OA_Lexicon_eBL.csv + eBL_Dictionary.csv, fuzzy matching
+2. **Embedder (`src/retrieval/embedder.py`):** sentence-transformers all-MiniLM-L6-v2, 384-dim
+3. **FAISS Index (`src/retrieval/index_builder.py`):** IndexFlatL2, 1,589 English embedding vectors
+4. **Retriever (`src/retrieval/retriever.py`):** FAISS k-NN over English embeddings
 
-3. **FAISS Index (`src/retrieval/index_builder.py`):**
-   - IndexFlatL2 for exact L2 search (corpus size < 100k)
-   - Built over 1,589 English translation embeddings
-   - Saved to `data/indices/faiss_index.bin` + embeddings.npy
+**RAG Redesign (2026-02-20) — see `docs/UPDATE.md` for rationale:**
 
-4. **Retriever (`src/retrieval/retriever.py`):**
-   - Loads corpus, lexicon, embedder, and FAISS index
-   - Query strategy: extract lexicon context from Akkadian → embed as English proxy
-   - Returns k-nearest neighbors with transliteration, translation, distance
+Root cause of original failure: embedding English translations we haven't produced yet is circular. Retrieved examples were from the wrong genre ~80% of the time.
 
-**Build script:** `scripts/build_index.py` orchestrates the pipeline
+5. **Genre Classifier (`src/retrieval/genre.py`):**
+   - Rule-based, Akkadian-side heuristics
+   - `letter`: `um-ma ... qí-bi-ma` or `a-na ... qí-bi₄-ma`
+   - `legal`: `IGI` witness marker, oath/tablet formulas
+   - `commercial`: 2+ commodity Sumerograms (ANNA, TÚG, KÙ.BABBAR, GÚ, GÍN)
+   - `administrative`: 3+ numeric tokens
+   - Letter formula detector: extracts sender/recipient from epistolary headers
 
-**Testing:** Verified on sample Akkadian queries (letter formulas) and English queries
+6. **BM25 Index (`src/retrieval/bm25_index.py`):**
+   - `rank_bm25` over Akkadian transliteration text
+   - Built in-memory at `Retriever.load()` time (fast, no saved file needed)
+   - Tokenizes on whitespace/punctuation, preserves hyphenated tokens
+
+7. **Genre-Filtered Retrieval (`Retriever.retrieve_bm25()`):**
+   - Classify query → filter corpus to same genre → rank by BM25 score
+   - Hard genre filter (not soft weight)
+   - Falls back to unfiltered BM25 if query is "unknown" or genre pool is empty
+   - `min_score=0.5` threshold: 1 good example > 3 mediocre ones
+
+**Context Assembly (`src/modeling/context_assembler.py`)** updated format:
+```
+[1] Structural annotation (letters only): "Letter from X to Y"
+[2] Lexicon glosses
+[3] Retrieved examples (BM25 genre-filtered, ≤3, above threshold)
+[4] Translate: [input]
+```
 
 ### Blockers / Risks
-- ~~No Akkadian embedder exists (embedding English side is heuristic)~~ **Mitigated:** Lexicon extraction provides semantic context
-- ~~Retrieval quality hard to evaluate without labeled data~~ **Deferred:** Will evaluate during Phase 3 training
+- ~~No Akkadian embedder exists~~ **Resolved:** BM25 on Akkadian side eliminates the need
+- ~~Retrieval quality hard to evaluate~~ **Resolved:** Diagnostic script (`scripts/diagnose_retrieval.py`) measures genre precision, content overlap, deduplication
 
 ---
 
@@ -355,7 +358,7 @@ Publication extraction → Corpus size → Model performance
 
 ## Current Status
 
-**Phase:** Phase 3 - Model Fine-Tuning — IN PROGRESS (2026-02-03)
+**Phase:** Phase 3 - Model Fine-Tuning — IN PROGRESS (2026-02-20)
 **Previous phases:**
 - Phase 0 - Baseline — COMPLETE
 - Phase 1 - Data Extraction — COMPLETE (revised targets)
@@ -391,16 +394,20 @@ Publication extraction → Corpus size → Model performance
 - ✓ Lexicon loaded: ~95% coverage of proper nouns + Sumerograms
 - ✓ Retrieval tested and working
 
-**Phase 3: Model Fine-Tuning** (In Progress 2026-02-03)
+**Phase 3: Model Fine-Tuning** (In Progress — RAG redesign complete 2026-02-20)
 - ✓ Lexicon Sumerogram resolution rewritten: 6 → 80 glossed forms, 157 → 222
-  forms recognised.  Root cause: eBL lookup was keyed on `norm` (inflected);
-  switched to `lexeme` (dictionary base form) + mimation stripping.
+  forms recognised.
 - ✓ `predict_with_generate` disabled during training-eval checkpoints.
-  Checkpoint selection uses `eval_loss` only; beam-search generation reserved
-  for post-training eval (`train.py:evaluate()`).
 - ✓ `gradient_checkpointing: true` enabled as memory safety margin on A100.
-- ✓ Dead code removed: `_make_compute_metrics`, unused `sacrebleu`/`numpy`
-  imports in trainer.
+- ✓ Dead code removed from trainer.
+- ✓ First successful training run on A100 cluster (bf16, 10 epochs).
+- ✓ **RAG redesign implemented and validated (2026-02-20):**
+  - Genre precision: 21.2% → 91.8% (target 85%+ ✓)
+  - Content overlap: 6.5% → 46.4% (target 20%+ ✓)
+  - New modules: `src/retrieval/genre.py`, `src/retrieval/bm25_index.py`
+  - Retriever updated with `retrieve_bm25()` / `retrieve_bm25_batch()`
+  - Context assembler updated with structural annotation + BM25 examples
+- **Next:** Retrain with improved RAG context, evaluate competition score
 
 **Extraction context (2026-02-02):**
 Initial extraction run on all 952 PDFs yielded only 146 pairs (0.09% of target).
@@ -440,10 +447,7 @@ Rationale:
 - Alternative data sources (ORACC API, digital repositories) can be explored
   in parallel with Phase 2-3
 
-**Next step:** Submit training job to cluster: `./cluster/submit_job.sh train`
-
-`train.slurm` requests 1× A100, 48 h walltime.  The job auto-builds the FAISS
-index if missing, then runs `scripts/train.py --config configs/training.yaml`.
+**Next step:** Retrain on cluster with improved RAG context. Submit `cluster/train_nocontainer.slurm`. The retriever now builds BM25 in-memory at load time — no separate index build step needed.
 
 **Blockers:** None.
 

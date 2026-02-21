@@ -26,6 +26,7 @@ import logging
 from typing import List, Dict, Optional
 
 from src.retrieval import Retriever, Lexicon
+from src.retrieval.genre import classify_genre, detect_letter_formula
 
 logger = logging.getLogger(__name__)
 
@@ -83,19 +84,24 @@ class ContextAssembler:
         """
         parts = []
 
-        # 1. Lexicon lookups
+        # 1. Structural annotation (letters only)
+        annotation = self._format_structural_annotation(transliteration)
+        if annotation:
+            parts.append(annotation)
+
+        # 2. Lexicon lookups
         if self.include_lexicon and self.lexicon is not None:
             lexicon_text = self._format_lexicon(transliteration)
             if lexicon_text:
                 parts.append(lexicon_text)
 
-        # 2. Retrieved examples
+        # 3. Retrieved examples (BM25 genre-filtered)
         if self.include_examples and self.retriever is not None:
             examples_text = self._format_examples(transliteration)
             if examples_text:
                 parts.append(examples_text)
 
-        # 3. Input instruction
+        # 4. Input instruction
         if include_instruction:
             parts.append(f"Translate: {transliteration}")
 
@@ -165,9 +171,24 @@ class ContextAssembler:
 
         return "Lexicon:\n" + "\n".join(entries)
 
+    def _format_structural_annotation(self, transliteration: str) -> str:
+        """
+        Detect letter formula and return a structural annotation line.
+
+        Returns empty string for non-letter texts.
+        """
+        if classify_genre(transliteration) != "letter":
+            return ""
+        formula = detect_letter_formula(transliteration[:200])
+        if formula:
+            return f"Letter from {formula['sender']} to {formula['recipient']}"
+        return ""
+
     def _format_examples(self, transliteration: str) -> str:
         """
-        Format retrieved translation examples.
+        Format retrieved translation examples using BM25 genre-filtered retrieval.
+
+        Falls back to FAISS retrieval if BM25 is not available.
 
         Args:
             transliteration: Akkadian transliteration (query)
@@ -178,13 +199,19 @@ class ContextAssembler:
         if self.retriever is None:
             return ""
 
-        # Retrieve examples
         try:
-            results = self.retriever.retrieve(
-                transliteration,
-                k=self.num_examples,
-                use_lexicon=True,
-            )
+            # Use BM25 genre-filtered retrieval if available
+            if self.retriever.bm25 is not None:
+                results = self.retriever.retrieve_bm25(
+                    transliteration,
+                    k=self.num_examples,
+                )
+            else:
+                results = self.retriever.retrieve(
+                    transliteration,
+                    k=self.num_examples,
+                    use_lexicon=True,
+                )
         except Exception as e:
             logger.warning(f"Retrieval failed: {e}")
             return ""
@@ -192,10 +219,8 @@ class ContextAssembler:
         if not results:
             return ""
 
-        # Format examples
         examples = []
         for i, result in enumerate(results, 1):
-            # Truncate if too long
             trans_lit = result["transliteration"][:80]
             translation = result["translation"][:100]
             examples.append(f"[{i}] {trans_lit} → {translation}")
