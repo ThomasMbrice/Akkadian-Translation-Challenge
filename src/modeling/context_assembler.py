@@ -1,22 +1,32 @@
 """
 Context assembler for ByT5 translation with RAG.
 
-Combines lexicon lookups and retrieved translation examples into a
-formatted context string that ByT5 can use for translation.
+Combines pre-translated scaffold, lexicon lookups, and retrieved examples
+into a formatted context string that ByT5 can use for translation.
 
-Format:
+Format (with pre-translation):
+    Scaffold: "Say to Kuliya, thus Aššur-imittī: 4 talent(s) 20 mina(s) tin"
+
+    Lexicon:
+    - ku-nu-ki = under seal (PN)
+
+    Similar translations:
+    [Example 1: Akkadian → English]
+
+    Complete the translation: [remaining Akkadian]
+
+Format (without pre-translation / fallback):
     Lexicon:
     - DUMU = son
     - A-šùr-i-mì-tí = Aššur-imittī (person name)
 
     Similar translations:
     [Example 1: Akkadian → English]
-    [Example 2: Akkadian → English]
 
     Translate: [input transliteration]
 
 Usage:
-    assembler = ContextAssembler(retriever, max_length=800)
+    assembler = ContextAssembler(retriever, lexicon, pretranslator, max_length=800)
     context = assembler.assemble(
         transliteration="a-na A-šùr-i-mì-tí DUMU Ṣí-lí-{d}UTU qí-bi-ma"
     )
@@ -35,13 +45,15 @@ class ContextAssembler:
     """
     Assembles RAG context for ByT5 translation.
 
-    Combines lexicon and retrieved examples into a formatted prompt.
+    Combines pre-translated scaffold, lexicon glosses, and retrieved examples
+    into a formatted prompt.
     """
 
     def __init__(
         self,
         retriever: Optional[Retriever] = None,
         lexicon: Optional[Lexicon] = None,
+        pretranslator=None,
         max_length: int = 800,
         num_examples: int = 3,
         include_lexicon: bool = True,
@@ -51,6 +63,8 @@ class ContextAssembler:
         Args:
             retriever: Retriever instance (optional, for examples)
             lexicon: Lexicon instance (optional, for lookups)
+            pretranslator: PreTranslator instance (optional). When provided,
+                           enables scaffold-based context format.
             max_length: Maximum context length in characters (ByT5 limit ~1024 bytes)
             num_examples: Number of retrieved examples to include
             include_lexicon: Whether to include lexicon lookups
@@ -58,6 +72,7 @@ class ContextAssembler:
         """
         self.retriever = retriever
         self.lexicon = lexicon
+        self.pretranslator = pretranslator
         self.max_length = max_length
         self.num_examples = num_examples
         self.include_lexicon = include_lexicon
@@ -75,35 +90,65 @@ class ContextAssembler:
         """
         Assemble full context for translation.
 
+        When a pretranslator is available, produces the scaffold-based format:
+          Scaffold: <pre-translated English>
+          Lexicon: <glosses for remaining untranslated terms>
+          Similar translations: <BM25 examples>
+          Complete the translation: <remaining Akkadian>
+
+        Without a pretranslator, falls back to the original format:
+          Letter from X to Y  (structural annotation)
+          Lexicon: <all glosses>
+          Similar translations: <examples>
+          Translate: <full transliteration>
+
         Args:
             transliteration: Akkadian transliteration to translate
-            include_instruction: Whether to include "Translate:" instruction
+            include_instruction: Whether to include the final instruction line
 
         Returns:
             Formatted context string
         """
         parts = []
 
-        # 1. Structural annotation (letters only)
-        annotation = self._format_structural_annotation(transliteration)
-        if annotation:
-            parts.append(annotation)
+        # Run pre-translation if available
+        scaffold = ""
+        remaining = transliteration
+        pretrans_result = None
 
-        # 2. Lexicon lookups
+        if self.pretranslator is not None:
+            pretrans_result = self.pretranslator.pre_translate(transliteration)
+            scaffold = pretrans_result["scaffold"]
+            # Fall back to full text if pre-translation produced no remaining
+            remaining = pretrans_result["remaining"] if pretrans_result["remaining"] else transliteration
+
+        # 1. Scaffold / structural annotation
+        if scaffold:
+            parts.append(f"Scaffold: {scaffold}")
+        else:
+            # Legacy fallback: structural annotation for letters
+            annotation = self._format_structural_annotation(transliteration)
+            if annotation:
+                parts.append(annotation)
+
+        # 2. Lexicon glosses — only for the remaining (untranslated) text
         if self.include_lexicon and self.lexicon is not None:
-            lexicon_text = self._format_lexicon(transliteration)
+            lexicon_text = self._format_lexicon(remaining)
             if lexicon_text:
                 parts.append(lexicon_text)
 
-        # 3. Retrieved examples (BM25 genre-filtered)
+        # 3. Retrieved examples — based on full transliteration for BM25 quality
         if self.include_examples and self.retriever is not None:
             examples_text = self._format_examples(transliteration)
             if examples_text:
                 parts.append(examples_text)
 
-        # 4. Input instruction
+        # 4. Instruction
         if include_instruction:
-            parts.append(f"Translate: {transliteration}")
+            if scaffold and pretrans_result and pretrans_result["remaining"]:
+                parts.append(f"Complete the translation: {remaining}")
+            else:
+                parts.append(f"Translate: {transliteration}")
 
         # Join and truncate
         context = "\n\n".join(parts)

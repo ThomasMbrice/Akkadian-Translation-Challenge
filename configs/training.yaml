@@ -2,7 +2,7 @@
 
 # Model
 model:
-  name: google/byt5-large  # Options: google/byt5-small, google/byt5-base, google/byt5-large
+  name: google/byt5-base  # Options: google/byt5-small, google/byt5-base, google/byt5-large
   max_input_length: 1536   # ByT5 max sequence length (bytes) - needs headroom for RAG context + diacritics
   max_output_length: 256   # Max translation length
 

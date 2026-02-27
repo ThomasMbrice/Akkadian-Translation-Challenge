@@ -46,6 +46,7 @@ from src.utils.io import setup_logging, load_yaml, save_json
 from src.modeling import ByT5Trainer, ContextAssembler, Augmenter
 from src.retrieval import Retriever
 from src.evaluation.metrics import MetricsCalculator
+from src.preprocessing.pretranslator import PreTranslator
 
 logger = logging.getLogger(__name__)
 
@@ -130,10 +131,13 @@ def setup_assembler(config: dict, retriever, lexicon):
     if retriever is None and lexicon is None:
         return None
 
+    pretranslator = PreTranslator(lexicon=lexicon) if lexicon is not None else None
+
     ret_cfg = config.get("retrieval", {})
     return ContextAssembler(
         retriever=retriever,
         lexicon=lexicon,
+        pretranslator=pretranslator,
         max_length=ret_cfg.get("max_context_length", 800),
         num_examples=ret_cfg.get("k_examples", 3),
         include_lexicon=True,

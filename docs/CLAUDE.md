@@ -7,5 +7,12 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #2 | 2:25 PM | 🔵 | Akkadian NMT Project Documentation Structure | ~440 |
+| #26 | 3:02 PM | ✅ | Development Guide Updated with Geometric Mean Scoring Emphasis | ~363 |
+| #22 | 3:01 PM | ✅ | README Documentation Updated with Post-Processing Phase | ~365 |
+| #18 | " | ✅ | Architecture Roadmap Updated with Post-Processing Phase | ~389 |
+| #14 | 3:00 PM | ✅ | Milestones Summary Updated with Geometric Mean and Post-Processing Phase | ~401 |
+| #10 | 2:59 PM | ✅ | Phase 5 Timeline Adjusted to Sequential Weeks | ~296 |
+| #6 | 2:43 PM | 🔵 | Data Formats and Preprocessing Pipeline for Akkadian Translation | ~679 |
+| #4 | 2:25 PM | 🔵 | Phase 3 Model Fine-Tuning Progress and Critical Decisions | ~600 |
+| #2 | " | 🔵 | Akkadian NMT Project Documentation Structure | ~440 |
 </claude-mem-context>
