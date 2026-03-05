@@ -120,7 +120,11 @@ class Retriever:
         # Build BM25 index on Akkadian side
         logger.info("Building BM25 index on Akkadian transliterations...")
         self.bm25 = BM25Index()
-        self.bm25.build(self.corpus["transliteration"].fillna("").tolist())
+        texts = self.corpus["transliteration"].fillna("").tolist()
+        self.bm25.build(texts)
+
+        # Lookup: transliteration text → corpus index (for self-exclusion)
+        self._text_to_index = {t: i for i, t in enumerate(texts)}
 
         # Pre-classify corpus by genre
         logger.info("Classifying corpus by genre...")
@@ -278,6 +282,11 @@ class Retriever:
         if self.bm25 is None or self.genre_labels is None:
             raise RuntimeError("BM25 index not loaded. Call load() first.")
 
+        # Exclude the query document itself (prevents self-retrieval during
+        # training/eval when the query is in the index).
+        self_idx = getattr(self, "_text_to_index", {}).get(query)
+        exclude = [self_idx] if self_idx is not None else None
+
         query_genre = classify_genre(query)
 
         # Build genre-filtered candidate index list
@@ -288,11 +297,13 @@ class Retriever:
         else:
             genre_indices = None  # unfiltered fallback
 
-        hits = self.bm25.search(query, k=k, indices=genre_indices, min_score=min_score)
+        hits = self.bm25.search(query, k=k, indices=genre_indices,
+                                min_score=min_score, exclude_indices=exclude)
 
         # If filtered search returned nothing, fall back to unfiltered
         if not hits and genre_indices is not None:
-            hits = self.bm25.search(query, k=k, indices=None, min_score=min_score)
+            hits = self.bm25.search(query, k=k, indices=None,
+                                    min_score=min_score, exclude_indices=exclude)
 
         results = []
         for rank, (idx, score) in enumerate(hits, start=1):

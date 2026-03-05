@@ -30,6 +30,67 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
+# Sexagesimal fraction detection
+#
+# Old Assyrian tablets record fractional weights by removing the decimal point
+# from the floating-point expansion:
+#   42.3333... minas  →  4233333 ma-na
+#    0.6666... minas  →  066666  ma-na
+#    1.8333... minas  →  1833333 ma-na   (float noise: 18333300000000001)
+#    0.5       minas  →  05      ma-na
+#   23.5       GÚ    →  235     GÚ
+#
+# Fraction map (leading digit of the decimal expansion → Unicode fraction):
+#   ⅙ = 0.1666...  prefix 1 + repeating 6s
+#   ⅓ = 0.3333...  repeating 3s
+#   ⅔ = 0.6666...  repeating 6s
+#   ⅚ = 0.8333...  prefix 8 + repeating 3s
+#   ½ = 0.5        single 5 (only when number has ≥ 2 digits)
+# ---------------------------------------------------------------------------
+
+# Matches recurring decimal fraction suffixes including Python float noise
+# (trailing zeros + optional off-by-one digit from float repr).
+_FRAC_RE = re.compile(
+    r'^(\d*?)'                         # minimal integer prefix
+    r'(83{4,}[30]*[01]?'              # ⅚: 83333...
+    r'|6{5,}[30]*[01]?'               # ⅔: 66666...
+    r'|3{5,}[30]*[01]?'               # ⅓: 33333...
+    r'|16{4,}[30]*[01]?'              # ⅙: 16666...
+    r')$'
+)
+_FRAC_CHAR = {'8': '⅚', '6': '⅔', '3': '⅓', '1': '⅙'}
+
+
+def _parse_number(num_str):
+    """
+    Convert a decimal-encoded OA number to readable mixed-number notation.
+
+    Returns the original string unchanged when no fraction pattern is detected.
+
+    Examples:
+        "4233333" → "42⅓"
+        "066666"  → "⅔"
+        "05"      → "½"
+        "235"     → "23½"
+        "5"       → "5"   (single digit: not a fraction)
+        "42"      → "42"
+    """
+    m = _FRAC_RE.match(num_str)
+    if m:
+        int_part = m.group(1)
+        frac_ch = _FRAC_CHAR[m.group(2)[0]]
+        n = int(int_part) if int_part else 0
+        return frac_ch if n == 0 else "{}{}".format(n, frac_ch)
+
+    # Half-fraction: ≥2-digit number ending in 5
+    if len(num_str) >= 2 and num_str.endswith('5'):
+        stripped = num_str[:-1].lstrip('0') or '0'
+        n = int(stripped)
+        return '½' if n == 0 else "{}½".format(n)
+
+    return num_str
+
+# ---------------------------------------------------------------------------
 # Determinative handling
 # ---------------------------------------------------------------------------
 

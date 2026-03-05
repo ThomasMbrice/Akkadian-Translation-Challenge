@@ -50,6 +50,7 @@ class BM25Index:
         k: int = 5,
         indices: List[int] = None,
         min_score: float = 0.0,
+        exclude_indices: List[int] = None,
     ) -> List[Tuple[int, float]]:
         """
         Search BM25 index for top-k results.
@@ -60,6 +61,8 @@ class BM25Index:
             indices: Optional subset of corpus indices to restrict search to.
                      If None, searches the full index.
             min_score: Minimum BM25 score to include (threshold).
+            exclude_indices: Corpus indices to exclude from results (e.g. the
+                             query document itself, to prevent self-retrieval).
 
         Returns:
             List of (corpus_index, score) tuples, sorted by descending score.
@@ -75,6 +78,11 @@ class BM25Index:
             candidates = [(i, float(scores[i])) for i in indices]
         else:
             candidates = list(enumerate(scores.tolist()))
+
+        # Remove self (or any explicitly excluded index) before ranking
+        if exclude_indices:
+            excluded = set(exclude_indices)
+            candidates = [(i, s) for i, s in candidates if i not in excluded]
 
         # Sort descending, apply threshold, cap at k
         candidates.sort(key=lambda x: -x[1])

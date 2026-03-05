@@ -29,6 +29,55 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
+def _short_gloss(definition: str) -> str:
+    """
+    Extract the first short gloss from a full eBL dictionary definition.
+
+    eBL entries follow several patterns:
+        '"gloss1, gloss2" [SUMEROGRAM]  1. detailed definition...'
+        '"gloss(variant)" OA;'   (period abbreviation like OA, jB, OB, NA)
+        'pl. m. & f. "gloss"'    (grammatical prefix before the quoted gloss)
+
+    Strategy: search for the first quoted English gloss (max 60 chars) anywhere
+    in the entry.  If no quoted gloss exists, fall back to bracket/number stripping.
+
+    Examples:
+        '"shekel" [GÍN]  1. weight: 1/60 mina'  →  "shekel"
+        '"son, child; member of a group"'        →  "son"
+        '"silver; money"'                        →  "silver"
+        'give (Gt stem)'                         →  "give"
+        '"tin (metal)"'                          →  "tin"
+        '"seal(ing)" jB;'                        →  "seal"
+        'pl. m. & f. "seal"'                     →  "seal"
+    """
+    if not definition:
+        return ""
+    text = definition.strip()
+
+    # Search for the first quoted English gloss anywhere in the text.
+    # Limit match length to 60 chars to avoid grabbing whole sentences.
+    m = re.search(r'["\u201c]([^"\u201d]{1,60})["\u201d]', text)
+    if m:
+        text = m.group(1).strip()
+    else:
+        # No quoted gloss: fall back to bracket/number stripping
+        text = re.split(r'[\u201d"]?\s*\[', text)[0]
+        text = re.split(r'\s+\d+\.', text)[0]
+        text = text.strip('"').strip("'").strip()
+
+    # Take only the first major sense (before ;)
+    text = text.split(";")[0].strip()
+
+    # Take only the first synonym (before ,)
+    text = text.split(",")[0].strip()
+
+    # Strip trailing parenthetical qualifiers like "(metal)" or "(Gt stem)"
+    text = re.sub(r'\s*\([^)]*\)\s*$', '', text).strip()
+
+    return text
+
+
 # Project root is three levels up: src/retrieval/lexicon.py -> src/retrieval -> src -> project root
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "data" / "raw" / "deep-past-initiative-machine-translation"
@@ -116,11 +165,34 @@ class Lexicon:
                 base = " ".join(parts[:-1]).strip()
             else:
                 base = word
-            clean_def = definition.strip('"').strip()
-            if base and clean_def and base not in ebl_base:
-                ebl_base[base] = clean_def
+            short = _short_gloss(definition)
+            if base and short and base not in ebl_base:
+                ebl_base[base] = short
 
         logger.info(f"Total dictionary entries: {len(self.dictionary)}")
+
+        # Hardcoded English glosses for frequent Sumerograms that eBL cannot
+        # resolve because the OA phonological form differs from Classical
+        # Akkadian (e.g. OA mer'u "son" vs Classical mārum which eBL uses).
+        # These are used as the last-resort fallback below.
+        _FALLBACK_SG_EN = {
+            "DUMU":      "son",
+            "DUMU.MUNUS": "daughter",
+            "KÙBABBAR":  "silver",
+            "KÙ.BABBAR": "silver",
+            "ANNA":      "tin",
+            "TÚG":       "textiles",
+            "GÚ":        "talents",
+            "GÍN":       "shekels",
+            "GIN":       "shekels",
+            "KÙ.GI":     "gold",
+            "IGI":       "before",
+            "MANA":      "minas",
+            "MA.NA":     "minas",
+            "URU":       "city",
+            "URUDU":     "copper",
+            "KIŠIB":     "seal",
+        }
 
         # Resolve Sumerograms from OA_Lexicon.
         # All-uppercase forms are Sumerograms; `lexeme` gives the dictionary
@@ -162,7 +234,16 @@ class Lexicon:
                     resolved += 1
                     break
 
+            # Fallback priority: eBL lookup → hardcoded table → OA Akkadian norm
+            if definition is None:
+                definition = _FALLBACK_SG_EN.get(form)
             self.sumerograms[form] = definition if definition else norm
+
+        # Seed any fallback entries not encountered in OA_Lexicon at all
+        # (e.g. KÙBABBAR, ANNA are absent from that file but appear in texts).
+        for form, gloss in _FALLBACK_SG_EN.items():
+            if form not in self.sumerograms:
+                self.sumerograms[form] = gloss
 
         self._sumerogram_forms = list(self.sumerograms.keys())
         logger.info(

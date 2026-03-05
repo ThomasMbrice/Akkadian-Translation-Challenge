@@ -105,7 +105,7 @@ class Normalizer:
 
         return text
 
-    def normalize_batch(self, texts: list[str]) -> list[str]:
+    def normalize_batch(self, texts):
         """
         Normalize a batch of texts.
 
