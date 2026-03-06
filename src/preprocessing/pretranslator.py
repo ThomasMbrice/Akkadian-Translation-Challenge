@@ -132,7 +132,12 @@ _COMMODITIES = {
 _COMM_ALT = "KÙ\\.BABBAR|KÙBABBAR|KÙ\\.GI|URUDU|ANNA"
 _WEIGHT_ALT = "MA\\.NA|MANA|GÍN|GIN|GÚ|ma-na|me-at"
 _NUM_WEIGHT_RE = re.compile(
-    rf'(\d+)\s+({_WEIGHT_ALT})(?:\s+({_COMM_ALT}))?',
+    # (?<![\w-]) prevents matching digits inside hyphenated compounds (e.g. x-6 GÍN
+    # should not match at the 6).
+    # \b after the unit prevents matching GÍN inside GÍNTA.
+    # (?!-) after unit and commodity prevents splitting hyphenated forms like
+    # ma-na-im (genitive suffix) or URUDU-a-kà (commodity as compound component).
+    rf'(?<![\w-])(\d+)\s+({_WEIGHT_ALT})\b(?!-)(?:\s+({_COMM_ALT})(?!-))?',
     re.UNICODE,
 )
 
@@ -146,7 +151,7 @@ _COUNT_UNIT_SINGULAR = {
 }
 
 _NUM_COUNT_RE = re.compile(
-    r'(\d+)\s+(TÚG|TUG)',
+    r'(?<![\w-])(\d+)\s+(TÚG|TUG)',
     re.UNICODE,
 )
 
@@ -363,6 +368,17 @@ class PreTranslator:
         # Pass 3: standalone Sumerograms (not already covered)
         for m in _SG_RE.finditer(text):
             if any(i in covered for i in range(m.start(), m.end())):
+                continue
+            # Skip Sumerograms embedded in hyphenated compounds, immediately
+            # following a closing paren (determinative-prefix notation like (d)ENLÍL),
+            # or immediately following an opening paren (type-indicator notation like
+            # (TÚG)ku-ta-ni where (TÚG) classifies the following Akkadian word).
+            # Extracting them would split the compound and produce orphaned fragments
+            # like "-a-šur" (from PUZUR₄-a-šur), "i-tur₄-" (from i-tur₄-DINGIR),
+            # or "(" / ")ku-ta-ni" (from (TÚG)ku-ta-ni).
+            pre = text[m.start() - 1] if m.start() > 0 else ''
+            post = text[m.end()] if m.end() < len(text) else ''
+            if pre in ('-', ')', '(') or post in ('-', ')'):
                 continue
             sg = m.group(0)
             en = _SUMEROGRAM_EN.get(sg)
