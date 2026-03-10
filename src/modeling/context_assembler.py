@@ -37,6 +37,9 @@ from typing import List, Dict, Optional
 
 from src.retrieval import Retriever, Lexicon
 from src.retrieval.genre import classify_genre, detect_letter_formula
+from src.preprocessing.pretranslator import (
+    _NUM_WEIGHT_RE, _NUM_COUNT_RE, _format_weight, _format_count,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -111,29 +114,19 @@ class ContextAssembler:
         """
         parts = []
 
-        # Run pre-translation if available
-        scaffold = ""
-        remaining = transliteration
-        pretrans_result = None
-
+        # 1. Hints (when pretranslator available) or structural annotation (fallback)
         if self.pretranslator is not None:
-            pretrans_result = self.pretranslator.pre_translate(transliteration)
-            scaffold = pretrans_result["scaffold"]
-            # Fall back to full text if pre-translation produced no remaining
-            remaining = pretrans_result["remaining"] if pretrans_result["remaining"] else transliteration
-
-        # 1. Scaffold / structural annotation
-        if scaffold:
-            parts.append(f"Scaffold: {scaffold}")
+            hints = self._format_hints(transliteration)
+            if hints:
+                parts.append(hints)
         else:
-            # Legacy fallback: structural annotation for letters
             annotation = self._format_structural_annotation(transliteration)
             if annotation:
                 parts.append(annotation)
 
-        # 2. Lexicon glosses — only for the remaining (untranslated) text
-        if self.include_lexicon and self.lexicon is not None:
-            lexicon_text = self._format_lexicon(remaining)
+        # 2. Lexicon glosses — only in no-pretranslator fallback path
+        if self.include_lexicon and self.lexicon is not None and self.pretranslator is None:
+            lexicon_text = self._format_lexicon(transliteration)
             if lexicon_text:
                 parts.append(lexicon_text)
 
@@ -143,12 +136,9 @@ class ContextAssembler:
             if examples_text:
                 parts.append(examples_text)
 
-        # 4. Instruction
+        # 4. Instruction — always the full transliteration
         if include_instruction:
-            if scaffold and pretrans_result and pretrans_result["remaining"]:
-                parts.append(f"Complete the translation: {remaining}")
-            else:
-                parts.append(f"Translate: {transliteration}")
+            parts.append(f"Translate: {transliteration}")
 
         # Join and truncate
         context = "\n\n".join(parts)
@@ -180,6 +170,78 @@ class ContextAssembler:
     # ------------------------------------------------------------------
     # Formatting helpers
     # ------------------------------------------------------------------
+
+    def _format_hints(self, transliteration: str) -> str:
+        """
+        Generate compact labeled hint sections for enriched context.
+
+        Sections (ordered): Letter formula → Names → Numbers → Glosses
+        Called when self.pretranslator is not None.
+
+        Returns:
+            Newline-joined hint lines (empty string if no hints produced)
+        """
+        result = self.pretranslator.pre_translate(transliteration)
+        formula_info = result.get("formula")
+        scaffold = result.get("scaffold", "")
+
+        formula_line = ""
+        names_line = ""
+        numbers_line = ""
+        glosses_line = ""
+
+        # Letter formula: extract formula_en from scaffold by splitting on first ":"
+        if formula_info is not None and scaffold:
+            formula_en = scaffold.split(":", 1)[0]
+            formula_line = f"Letter formula: {formula_en}"
+
+        # Numbers: iterate weight and count regex matches
+        covered_sg = set()
+        num_pairs = []
+
+        for m in _NUM_WEIGHT_RE.finditer(transliteration):
+            num_str = m.group(1)
+            unit_key = m.group(2)
+            commodity_key = m.group(3) or ""
+            formatted = _format_weight(num_str, unit_key, commodity_key)
+            num_pairs.append(f"{m.group(0)} = {formatted}")
+            covered_sg.add(unit_key)
+            if commodity_key:
+                covered_sg.add(commodity_key)
+
+        for m in _NUM_COUNT_RE.finditer(transliteration):
+            num_str = m.group(1)
+            unit_key = m.group(2)
+            formatted = _format_count(num_str, unit_key)
+            num_pairs.append(f"{m.group(0)} = {formatted}")
+            covered_sg.add(unit_key)
+
+        if num_pairs:
+            num_pairs = list(dict.fromkeys(num_pairs))  # deduplicate, preserve order
+            numbers_line = "Numbers: " + ", ".join(num_pairs)
+
+        # Names: proper noun mappings
+        if self.lexicon is not None:
+            proper_nouns = self.lexicon.extract_proper_nouns(transliteration)
+            if proper_nouns:
+                names_parts = list(dict.fromkeys(
+                    f"{pn['form']} = {pn['norm']}" for pn in proper_nouns
+                ))
+                names_line = "Names: " + ", ".join(names_parts)
+
+        # Glosses: Sumerograms not already covered by Numbers
+        if self.lexicon is not None:
+            sumerograms = self.lexicon.extract_sumerograms(transliteration)
+            gloss_parts = list(dict.fromkeys(
+                f"{sg['sumerogram']} = {sg['definition']}"
+                for sg in sumerograms
+                if sg["sumerogram"] not in covered_sg
+            ))
+            if gloss_parts:
+                glosses_line = "Glosses: " + ", ".join(gloss_parts)
+
+        sections = [s for s in [formula_line, names_line, numbers_line, glosses_line] if s]
+        return "\n".join(sections)
 
     def _format_lexicon(self, transliteration: str) -> str:
         """

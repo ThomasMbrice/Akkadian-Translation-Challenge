@@ -14,4 +14,14 @@
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
 | #104 | 4:55 PM | 🔵 | Phase 3 Training Pipeline with RAG-Augmented ByT5 Fine-tuning | ~643 |
+
+### Mar 5, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #317 | 5:38 PM | ✅ | Committed major pipeline improvements addressing three critical bugs | ~555 |
+| #307 | 5:24 PM | 🟣 | Enhanced RAG retrieval system with fraction parsing and improved lexicon glosses | ~546 |
+| #303 | 2:38 PM | ⚖️ | Disabled pre-translator in training pipeline to eliminate scaffold | ~402 |
+| #302 | " | 🔴 | Fixed Python 3.9 compatibility in train.py | ~213 |
+| #297 | 2:33 PM | 🟣 | Comprehensive 8-stage diagnostic test suite for Akkadian translation pipeline | ~750 |
 </claude-mem-context>
