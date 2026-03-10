@@ -152,18 +152,18 @@ def setup_assembler(config: dict, retriever, lexicon):
 EVAL_BATCH_SIZE = 16  # generation batch size for post-training eval
 
 
-def evaluate(trainer: ByT5Trainer, split_name: str, split_df: pd.DataFrame) -> dict:
+def evaluate(trainer: ByT5Trainer, split_name: str, split_df: pd.DataFrame, max_length: int = 256) -> dict:
     """Generate translations for *split_df* and return all metrics."""
     sources = split_df["transliteration"].fillna("").tolist()
     refs = split_df["translation"].fillna("").tolist()
 
-    logger.info(f"Evaluating {split_name} ({len(sources)} examples)…")
+    logger.info(f"Evaluating {split_name} ({len(sources)} examples)… (max_length={max_length})")
 
     # Batched generation to avoid OOM
     hypotheses = []
     for start in range(0, len(sources), EVAL_BATCH_SIZE):
         batch = sources[start : start + EVAL_BATCH_SIZE]
-        hypotheses.extend(trainer.translate(batch, num_beams=5, max_length=256))
+        hypotheses.extend(trainer.translate(batch, num_beams=5, max_length=max_length))
         logger.info(f"  generated {min(start + EVAL_BATCH_SIZE, len(sources))}/{len(sources)}")
 
     # Metrics
@@ -219,6 +219,7 @@ def parse_args():
     # Feature toggles
     parser.add_argument("--no-rag", action="store_true", help="Disable RAG context")
     parser.add_argument("--no-aug", action="store_true", help="Disable augmentation")
+    parser.add_argument("--max-output-length", type=int, default=None, help="Override max output length for generation")
     return parser.parse_args()
 
 
@@ -247,6 +248,8 @@ def main():
         config.setdefault("retrieval", {})["enabled"] = False
     if args.no_aug:
         config.setdefault("data", {}).setdefault("augmentation", {})["enabled"] = False
+    if args.max_output_length is not None:
+        config["model"]["max_output_length"] = args.max_output_length
 
     logger.info("=" * 60)
     logger.info("PHASE 3 — ByT5 FINE-TUNING")
@@ -306,15 +309,19 @@ def main():
     train_cfg = config["training"]
     hw_cfg = config.get("hardware", {})
 
+    # In eval-only mode, load from the fine-tuned checkpoint, not the base model
+    model_source = args.eval_only if args.eval_only else model_cfg["name"]
+    max_output_length = model_cfg["max_output_length"]
+
     trainer = ByT5Trainer(
-        model_name=model_cfg["name"],
+        model_name=model_source,
         output_dir=str(PROJECT_ROOT / config["output"]["output_dir"]),
         use_rag=use_rag,
         use_augmentation=use_aug,
         context_assembler=assembler,
         augmenter=augmenter,
         max_source_length=model_cfg["max_input_length"],
-        max_target_length=model_cfg["max_output_length"],
+        max_target_length=max_output_length,
     )
 
     # ------------------------------------------------------------------
@@ -322,11 +329,9 @@ def main():
     # ------------------------------------------------------------------
     if args.eval_only:
         logger.info(f"Eval-only mode — checkpoint: {args.eval_only}")
-        # Model was already loaded from HF hub; for a saved checkpoint the
-        # user would need to point model_name at the local path.  For now
-        # this path exercises the eval loop on whatever model is loaded.
+        logger.info(f"Max output length: {max_output_length}")
         results = {
-            split: evaluate(trainer, split, df)
+            split: evaluate(trainer, split, df, max_length=max_output_length)
             for split, df in [("val", val_df), ("test", test_df)]
         }
         out_path = PROJECT_ROOT / config["output"]["output_dir"] / "eval_results.json"
@@ -362,7 +367,7 @@ def main():
     logger.info("=" * 60)
 
     results = {
-        split: evaluate(trainer, split, df)
+        split: evaluate(trainer, split, df, max_length=max_output_length)
         for split, df in [("val", val_df), ("test", test_df)]
     }
 
