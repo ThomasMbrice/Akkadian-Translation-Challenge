@@ -47,8 +47,8 @@ venv/
 ._*
 
 # Data files (competition data is large)
-data/
-!data/.gitkeep
+#data/
+#data/.gitkeep
 
 # Model checkpoints (large files)
 models/
@@ -59,7 +59,8 @@ outputs/
 predictions/
 submissions/
 *.csv
-!data/.gitkeep
+#!data/.gitkeep
+data/raw/deep-past-initiative-machine-translation.zip
 
 # Logs
 logs/
@@ -83,3 +84,10 @@ configs/local_*.yaml
 
 # SLURM logs
 logs/slurm/
+
+# Diagnostic scripts (local only, not for review)
+diagnostics/
+
+# Claude AI assistant files
+CLAUDE.md
+**/CLAUDE.md

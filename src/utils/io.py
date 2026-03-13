@@ -5,7 +5,7 @@ File I/O utilities for the Akkadian NMT project.
 import json
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 import pandas as pd
 import yaml
@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def load_csv(
-    file_path: str | Path,
+    file_path: Union[str, Path],
     required_columns: Optional[List[str]] = None,
 ) -> pd.DataFrame:
     """
@@ -50,7 +50,7 @@ def load_csv(
 
 def save_csv(
     df: pd.DataFrame,
-    file_path: str | Path,
+    file_path: Union[str, Path],
     create_dirs: bool = True,
 ) -> None:
     """
@@ -70,7 +70,7 @@ def save_csv(
     df.to_csv(file_path, index=False)
 
 
-def load_yaml(file_path: str | Path) -> Dict[str, Any]:
+def load_yaml(file_path: Union[str, Path]) -> Dict[str, Any]:
     """
     Load YAML configuration file.
 
@@ -96,8 +96,8 @@ def load_yaml(file_path: str | Path) -> Dict[str, Any]:
 
 
 def save_json(
-    data: Dict | List,
-    file_path: str | Path,
+    data: Union[Dict, List],
+    file_path: Union[str, Path],
     create_dirs: bool = True,
     indent: int = 2,
 ) -> None:
@@ -120,7 +120,7 @@ def save_json(
         json.dump(data, f, indent=indent, ensure_ascii=False)
 
 
-def load_json(file_path: str | Path) -> Dict | List:
+def load_json(file_path: Union[str, Path]) -> Union[Dict, List]:
     """
     Load JSON file.
 
@@ -145,7 +145,7 @@ def load_json(file_path: str | Path) -> Dict | List:
     return data
 
 
-def ensure_dir(dir_path: str | Path) -> Path:
+def ensure_dir(dir_path: Union[str, Path]) -> Path:
     """
     Ensure directory exists, create if necessary.
 
@@ -161,7 +161,7 @@ def ensure_dir(dir_path: str | Path) -> Path:
 
 
 def setup_logging(
-    log_file: Optional[str | Path] = None,
+    log_file: Optional[Union[str, Path]] = None,
     level: str = "INFO",
     format_str: Optional[str] = None,
 ) -> None:

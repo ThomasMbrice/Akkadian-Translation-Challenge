@@ -27,11 +27,13 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 │  │ TRANSLATION      │          │ LEXICON LOOKUP       │    │
 │  │ MEMORY (RAG)     │          │                      │    │
 │  │                  │          │ - Proper noun dict   │    │
-│  │ - Embed English  │          │ - Sumerogram dict    │    │
-│  │   side of corpus │          │   (KÙ.BABBAR=silver) │    │
-│  │ - FAISS index    │          │ - Determinative map  │    │
-│  │ - Retrieve k=5   │          │ - Fuzzy matching     │    │
-│  │   similar pairs  │          │                      │    │
+│  │ - Genre classify │          │ - Sumerogram dict    │    │
+│  │   (Akkadian-side)│          │   (KÙ.BABBAR=silver) │    │
+│  │ - BM25 index on  │          │ - Determinative map  │    │
+│  │   Akkadian text  │          │ - Fuzzy matching     │    │
+│  │ - Genre-filtered │          │                      │    │
+│  │   retrieval k≤3  │          │                      │    │
+│  │ - Score threshold│          │                      │    │
 │  └────────┬─────────┘          └──────────┬───────────┘    │
 │           │                               │                 │
 │           └───────────────┬───────────────┘                 │
@@ -42,17 +44,18 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │  CONTEXT ASSEMBLY                                    │   │
 │  │                                                      │   │
-│  │  Lexicon:                                           │   │
-│  │  - A-šùr-i-mì-tí = Aššur-imitti (personal name)    │   │
-│  │  - DUMU = son                                       │   │
-│  │  - {d}UTU = divine determinative + Shamash         │   │
+│  │  [1] Structural annotation (letters only):          │   │
+│  │  Letter from {sender} to {recipient}                │   │
 │  │                                                      │   │
-│  │  Similar translations:                              │   │
+│  │  [2] Lexicon:                                       │   │
+│  │  - A-šùr-i-mì-tí = Aššur-imitti (personal name)    │   │
+│  │  - DUMU = son / KÙ.BABBAR = silver                  │   │
+│  │                                                      │   │
+│  │  [3] Similar translations (genre-matched, ≤3):      │   │
 │  │  [Retrieved example 1: Akkadian → English]          │   │
 │  │  [Retrieved example 2: Akkadian → English]          │   │
-│  │  [Retrieved example 3: Akkadian → English]          │   │
 │  │                                                      │   │
-│  │  Translate: [cleaned input]                         │   │
+│  │  [4] Translate: [cleaned input]                     │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                           │                                 │
 │                           ▼                                 │
@@ -87,7 +90,8 @@ Build neural machine translation from transliterated Old Assyrian cuneiform → 
 | Decision                         | Choice                    | Rationale |
 |----------------------------------|---------------------------|-----------|
 | Tokenization                     | Byte-level (ByT5)         | Akkadian has hyphens, diacritics, mixed scripts—BPE mangles it |
-| Retrieval embedding              | Embed English side        | No pretrained Akkadian embedders exist |
+| Retrieval signal                 | BM25 on Akkadian side     | Embedding English translations we haven't produced yet is circular; BM25 on source text gives 91.8% genre precision vs 21.2% |
+| Genre filtering                  | Rule-based (Akkadian heuristics) | IGI=legal, um-ma/qí-bi-ma=letter, commodity Sumerograms=commercial |
 | RAG integration                  | Context stuffing          | Simpler than Fusion-in-Decoder, sufficient for formulaic texts |
 | Data augmentation                | Back-translation + synthetic gaps  | Tablets have lacunae; model must handle missing content |
 | Post-processing                  | Mini-LLM (Phi-3/Llama)    | Refine outputs, fix formatting, improve proper noun handling |

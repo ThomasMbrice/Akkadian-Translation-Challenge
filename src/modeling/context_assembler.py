@@ -1,22 +1,32 @@
 """
 Context assembler for ByT5 translation with RAG.
 
-Combines lexicon lookups and retrieved translation examples into a
-formatted context string that ByT5 can use for translation.
+Combines pre-translated scaffold, lexicon lookups, and retrieved examples
+into a formatted context string that ByT5 can use for translation.
 
-Format:
+Format (with pre-translation):
+    Scaffold: "Say to Kuliya, thus Aššur-imittī: 4 talent(s) 20 mina(s) tin"
+
+    Lexicon:
+    - ku-nu-ki = under seal (PN)
+
+    Similar translations:
+    [Example 1: Akkadian → English]
+
+    Complete the translation: [remaining Akkadian]
+
+Format (without pre-translation / fallback):
     Lexicon:
     - DUMU = son
     - A-šùr-i-mì-tí = Aššur-imittī (person name)
 
     Similar translations:
     [Example 1: Akkadian → English]
-    [Example 2: Akkadian → English]
 
     Translate: [input transliteration]
 
 Usage:
-    assembler = ContextAssembler(retriever, max_length=800)
+    assembler = ContextAssembler(retriever, lexicon, pretranslator, max_length=800)
     context = assembler.assemble(
         transliteration="a-na A-šùr-i-mì-tí DUMU Ṣí-lí-{d}UTU qí-bi-ma"
     )
@@ -26,6 +36,10 @@ import logging
 from typing import List, Dict, Optional
 
 from src.retrieval import Retriever, Lexicon
+from src.retrieval.genre import classify_genre, detect_letter_formula
+from src.preprocessing.pretranslator import (
+    _NUM_WEIGHT_RE, _NUM_COUNT_RE, _format_weight, _format_count,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +48,15 @@ class ContextAssembler:
     """
     Assembles RAG context for ByT5 translation.
 
-    Combines lexicon and retrieved examples into a formatted prompt.
+    Combines pre-translated scaffold, lexicon glosses, and retrieved examples
+    into a formatted prompt.
     """
 
     def __init__(
         self,
         retriever: Optional[Retriever] = None,
         lexicon: Optional[Lexicon] = None,
+        pretranslator=None,
         max_length: int = 800,
         num_examples: int = 3,
         include_lexicon: bool = True,
@@ -50,6 +66,8 @@ class ContextAssembler:
         Args:
             retriever: Retriever instance (optional, for examples)
             lexicon: Lexicon instance (optional, for lookups)
+            pretranslator: PreTranslator instance (optional). When provided,
+                           enables scaffold-based context format.
             max_length: Maximum context length in characters (ByT5 limit ~1024 bytes)
             num_examples: Number of retrieved examples to include
             include_lexicon: Whether to include lexicon lookups
@@ -57,6 +75,7 @@ class ContextAssembler:
         """
         self.retriever = retriever
         self.lexicon = lexicon
+        self.pretranslator = pretranslator
         self.max_length = max_length
         self.num_examples = num_examples
         self.include_lexicon = include_lexicon
@@ -74,28 +93,50 @@ class ContextAssembler:
         """
         Assemble full context for translation.
 
+        When a pretranslator is available, produces the scaffold-based format:
+          Scaffold: <pre-translated English>
+          Lexicon: <glosses for remaining untranslated terms>
+          Similar translations: <BM25 examples>
+          Complete the translation: <remaining Akkadian>
+
+        Without a pretranslator, falls back to the original format:
+          Letter from X to Y  (structural annotation)
+          Lexicon: <all glosses>
+          Similar translations: <examples>
+          Translate: <full transliteration>
+
         Args:
             transliteration: Akkadian transliteration to translate
-            include_instruction: Whether to include "Translate:" instruction
+            include_instruction: Whether to include the final instruction line
 
         Returns:
             Formatted context string
         """
         parts = []
 
-        # 1. Lexicon lookups
-        if self.include_lexicon and self.lexicon is not None:
+        # 1. Hints (when pretranslator available) or structural annotation (fallback)
+        if self.pretranslator is not None:
+            hints = self._format_hints(transliteration)
+            if hints:
+                parts.append(hints)
+        else:
+            annotation = self._format_structural_annotation(transliteration)
+            if annotation:
+                parts.append(annotation)
+
+        # 2. Lexicon glosses — only in no-pretranslator fallback path
+        if self.include_lexicon and self.lexicon is not None and self.pretranslator is None:
             lexicon_text = self._format_lexicon(transliteration)
             if lexicon_text:
                 parts.append(lexicon_text)
 
-        # 2. Retrieved examples
+        # 3. Retrieved examples — based on full transliteration for BM25 quality
         if self.include_examples and self.retriever is not None:
             examples_text = self._format_examples(transliteration)
             if examples_text:
                 parts.append(examples_text)
 
-        # 3. Input instruction
+        # 4. Instruction — always the full transliteration
         if include_instruction:
             parts.append(f"Translate: {transliteration}")
 
@@ -129,6 +170,78 @@ class ContextAssembler:
     # ------------------------------------------------------------------
     # Formatting helpers
     # ------------------------------------------------------------------
+
+    def _format_hints(self, transliteration: str) -> str:
+        """
+        Generate compact labeled hint sections for enriched context.
+
+        Sections (ordered): Letter formula → Names → Numbers → Glosses
+        Called when self.pretranslator is not None.
+
+        Returns:
+            Newline-joined hint lines (empty string if no hints produced)
+        """
+        result = self.pretranslator.pre_translate(transliteration)
+        formula_info = result.get("formula")
+        scaffold = result.get("scaffold", "")
+
+        formula_line = ""
+        names_line = ""
+        numbers_line = ""
+        glosses_line = ""
+
+        # Letter formula: extract formula_en from scaffold by splitting on first ":"
+        if formula_info is not None and scaffold:
+            formula_en = scaffold.split(":", 1)[0]
+            formula_line = f"Letter formula: {formula_en}"
+
+        # Numbers: iterate weight and count regex matches
+        covered_sg = set()
+        num_pairs = []
+
+        for m in _NUM_WEIGHT_RE.finditer(transliteration):
+            num_str = m.group(1)
+            unit_key = m.group(2)
+            commodity_key = m.group(3) or ""
+            formatted = _format_weight(num_str, unit_key, commodity_key)
+            num_pairs.append(f"{m.group(0)} = {formatted}")
+            covered_sg.add(unit_key)
+            if commodity_key:
+                covered_sg.add(commodity_key)
+
+        for m in _NUM_COUNT_RE.finditer(transliteration):
+            num_str = m.group(1)
+            unit_key = m.group(2)
+            formatted = _format_count(num_str, unit_key)
+            num_pairs.append(f"{m.group(0)} = {formatted}")
+            covered_sg.add(unit_key)
+
+        if num_pairs:
+            num_pairs = list(dict.fromkeys(num_pairs))  # deduplicate, preserve order
+            numbers_line = "Numbers: " + ", ".join(num_pairs)
+
+        # Names: proper noun mappings
+        if self.lexicon is not None:
+            proper_nouns = self.lexicon.extract_proper_nouns(transliteration)
+            if proper_nouns:
+                names_parts = list(dict.fromkeys(
+                    f"{pn['form']} = {pn['norm']}" for pn in proper_nouns
+                ))
+                names_line = "Names: " + ", ".join(names_parts)
+
+        # Glosses: Sumerograms not already covered by Numbers
+        if self.lexicon is not None:
+            sumerograms = self.lexicon.extract_sumerograms(transliteration)
+            gloss_parts = list(dict.fromkeys(
+                f"{sg['sumerogram']} = {sg['definition']}"
+                for sg in sumerograms
+                if sg["sumerogram"] not in covered_sg
+            ))
+            if gloss_parts:
+                glosses_line = "Glosses: " + ", ".join(gloss_parts)
+
+        sections = [s for s in [formula_line, names_line, numbers_line, glosses_line] if s]
+        return "\n".join(sections)
 
     def _format_lexicon(self, transliteration: str) -> str:
         """
@@ -165,9 +278,24 @@ class ContextAssembler:
 
         return "Lexicon:\n" + "\n".join(entries)
 
+    def _format_structural_annotation(self, transliteration: str) -> str:
+        """
+        Detect letter formula and return a structural annotation line.
+
+        Returns empty string for non-letter texts.
+        """
+        if classify_genre(transliteration) != "letter":
+            return ""
+        formula = detect_letter_formula(transliteration[:200])
+        if formula:
+            return f"Letter from {formula['sender']} to {formula['recipient']}"
+        return ""
+
     def _format_examples(self, transliteration: str) -> str:
         """
-        Format retrieved translation examples.
+        Format retrieved translation examples using BM25 genre-filtered retrieval.
+
+        Falls back to FAISS retrieval if BM25 is not available.
 
         Args:
             transliteration: Akkadian transliteration (query)
@@ -178,13 +306,19 @@ class ContextAssembler:
         if self.retriever is None:
             return ""
 
-        # Retrieve examples
         try:
-            results = self.retriever.retrieve(
-                transliteration,
-                k=self.num_examples,
-                use_lexicon=True,
-            )
+            # Use BM25 genre-filtered retrieval if available
+            if self.retriever.bm25 is not None:
+                results = self.retriever.retrieve_bm25(
+                    transliteration,
+                    k=self.num_examples,
+                )
+            else:
+                results = self.retriever.retrieve(
+                    transliteration,
+                    k=self.num_examples,
+                    use_lexicon=True,
+                )
         except Exception as e:
             logger.warning(f"Retrieval failed: {e}")
             return ""
@@ -192,10 +326,8 @@ class ContextAssembler:
         if not results:
             return ""
 
-        # Format examples
         examples = []
         for i, result in enumerate(results, 1):
-            # Truncate if too long
             trans_lit = result["transliteration"][:80]
             translation = result["translation"][:100]
             examples.append(f"[{i}] {trans_lit} → {translation}")
