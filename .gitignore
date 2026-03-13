@@ -87,3 +87,7 @@ logs/slurm/
 
 # Diagnostic scripts (local only, not for review)
 diagnostics/
+
+# Claude AI assistant files
+CLAUDE.md
+**/CLAUDE.md
